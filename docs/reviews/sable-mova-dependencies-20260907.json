@@ -1,0 +1,3029 @@
+{
+  "recorded_at": "2026-09-07T03:34:34.381881+00:00",
+  "owner": "SABLE-WORK",
+  "parent": "ca043c92ef88b3166d11fe78e3d829b6caacb4b3",
+  "scope": "Dependency remediation on the credited PR12 baseline; F retains upstream integration and sponsor ownership",
+  "lockfile_sha256": "a0036fad0c41aad534e270ed43d8c7b1053aa3e513b9d21d5d340f2f0aa9b8cf",
+  "source_blobs": {
+    "app/shop/[id]/page.jsx": "8eb1ddaaf0cb20502168116f984a77d233e5a363",
+    "next-env.d.ts": "830fb594ca2970a827555c28a253b097367e08d8",
+    "package.json": "e46598e5e03a370acda385a2e20def85fdf05c7c",
+    "package-lock.json": "18b769ac199efa719d0e7dc86d119a246784d940",
+    "tests/components/StellarOrderWatch.test.jsx": "e05178e2689c849b4b30e7e4d372ae58b3a131ec",
+    "tests/components/StellarOrderWatch.test.tsx": "24010699bc8582f0052891d638f31c2899cbb214",
+    "tests/components/shop-cart-identity.test.jsx": "792a2ce4673bf1a56ca11af416c4c92c5b11c9f1",
+    "vitest.config.ts": "3e6aecb6d478689e8b2731b2dc26d4c5be5f3a7c"
+  },
+  "versions": {
+    "@emailjs/browser": {
+      "before": "4.4.1",
+      "after": "4.4.1"
+    },
+    "@stellar/freighter-api": {
+      "before": "6.0.1",
+      "after": "6.0.1"
+    },
+    "@stellar/stellar-sdk": {
+      "before": "16.2.0",
+      "after": "16.3.0"
+    },
+    "@supabase/supabase-js": {
+      "before": "2.112.3",
+      "after": "2.115.0"
+    },
+    "@testing-library/dom": {
+      "before": "9.3.4",
+      "after": "10.4.1"
+    },
+    "@testing-library/jest-dom": {
+      "before": "6.9.1",
+      "after": "6.9.1"
+    },
+    "@testing-library/react": {
+      "before": "14.3.1",
+      "after": "16.3.3"
+    },
+    "@types/node": {
+      "before": "20.19.43",
+      "after": "20.19.43"
+    },
+    "@types/react": {
+      "before": "18.3.3",
+      "after": "19.2.18"
+    },
+    "@types/react-dom": {
+      "before": "18.3.0",
+      "after": "19.2.7"
+    },
+    "@vercel/og": {
+      "before": "0.6.2",
+      "after": "0.6.8"
+    },
+    "@vitejs/plugin-react": {
+      "before": "4.7.0",
+      "after": "4.7.0"
+    },
+    "@vitest/coverage-v8": {
+      "before": "1.6.1",
+      "after": "4.1.11"
+    },
+    "@vitest/ui": {
+      "before": "1.6.1",
+      "after": "4.1.11"
+    },
+    "eslint": {
+      "before": "8.57.0",
+      "after": "8.57.1"
+    },
+    "eslint-config-next": {
+      "before": "14.2.5",
+      "after": "15.5.24"
+    },
+    "jsdom": {
+      "before": "24.1.3",
+      "after": "24.1.3"
+    },
+    "next": {
+      "before": "14.2.5",
+      "after": "15.5.24"
+    },
+    "next-auth": {
+      "before": "4.24.7",
+      "after": "4.24.15"
+    },
+    "nextjs-toploader": {
+      "before": "1.6.12",
+      "after": "1.6.12"
+    },
+    "postcss": {
+      "before": "8.5.26",
+      "after": "8.5.28"
+    },
+    "prettier": {
+      "before": "3.9.6",
+      "after": "3.9.6"
+    },
+    "react": {
+      "before": "18.3.1",
+      "after": "19.2.8"
+    },
+    "react-dom": {
+      "before": "18.3.1",
+      "after": "19.2.8"
+    },
+    "react-icons": {
+      "before": "5.2.1",
+      "after": "5.7.0"
+    },
+    "react-transition-group": {
+      "before": "4.4.5",
+      "after": "4.4.5"
+    },
+    "sharp": {
+      "before": "0.33.4",
+      "after": "0.35.4"
+    },
+    "tailwindcss": {
+      "before": "3.4.5",
+      "after": "3.4.19"
+    },
+    "typescript": {
+      "before": "5.5.3",
+      "after": "5.9.3"
+    },
+    "vite": {
+      "before": "5.4.21",
+      "after": "6.4.3"
+    },
+    "vitest": {
+      "before": "1.6.1",
+      "after": "4.1.11"
+    }
+  },
+  "audit_before": {
+    "auditReportVersion": 2,
+    "vulnerabilities": {
+      "@babel/runtime": {
+        "name": "@babel/runtime",
+        "severity": "moderate",
+        "isDirect": false,
+        "via": [
+          {
+            "source": 1104000,
+            "name": "@babel/runtime",
+            "dependency": "@babel/runtime",
+            "title": "Babel has inefficient RegExp complexity in generated code with .replace when transpiling named capturing groups",
+            "url": "https://github.com/advisories/GHSA-968p-4wvh-cqc8",
+            "severity": "moderate",
+            "cwe": ["CWE-1333"],
+            "cvss": {
+              "score": 6.2,
+              "vectorString": "CVSS:3.1/AV:L/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            "range": "<7.26.10"
+          }
+        ],
+        "effects": [],
+        "range": "<7.26.10",
+        "nodes": ["node_modules/@babel/runtime"],
+        "fixAvailable": true
+      },
+      "@next/eslint-plugin-next": {
+        "name": "@next/eslint-plugin-next",
+        "severity": "high",
+        "isDirect": false,
+        "via": ["glob"],
+        "effects": ["eslint-config-next"],
+        "range": "14.0.5-canary.0 - 15.0.0-rc.1",
+        "nodes": ["node_modules/@next/eslint-plugin-next"],
+        "fixAvailable": {
+          "name": "eslint-config-next",
+          "version": "16.3.4",
+          "isSemVerMajor": true
+        }
+      },
+      "@typescript-eslint/parser": {
+        "name": "@typescript-eslint/parser",
+        "severity": "high",
+        "isDirect": false,
+        "via": ["@typescript-eslint/typescript-estree"],
+        "effects": [],
+        "range": "6.16.0 - 7.5.0",
+        "nodes": ["node_modules/@typescript-eslint/parser"],
+        "fixAvailable": true
+      },
+      "@typescript-eslint/typescript-estree": {
+        "name": "@typescript-eslint/typescript-estree",
+        "severity": "high",
+        "isDirect": false,
+        "via": ["minimatch"],
+        "effects": ["@typescript-eslint/parser"],
+        "range": "6.16.0 - 7.5.0",
+        "nodes": ["node_modules/@typescript-eslint/typescript-estree"],
+        "fixAvailable": true
+      },
+      "ajv": {
+        "name": "ajv",
+        "severity": "moderate",
+        "isDirect": false,
+        "via": [
+          {
+            "source": 1113714,
+            "name": "ajv",
+            "dependency": "ajv",
+            "title": "ajv has ReDoS when using `$data` option",
+            "url": "https://github.com/advisories/GHSA-2g4f-4pwh-qvx6",
+            "severity": "moderate",
+            "cwe": ["CWE-400", "CWE-1333"],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": "<6.14.0"
+          }
+        ],
+        "effects": [],
+        "range": "<6.14.0",
+        "nodes": ["node_modules/ajv"],
+        "fixAvailable": true
+      },
+      "brace-expansion": {
+        "name": "brace-expansion",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          {
+            "source": 1105443,
+            "name": "brace-expansion",
+            "dependency": "brace-expansion",
+            "title": "brace-expansion Regular Expression Denial of Service vulnerability",
+            "url": "https://github.com/advisories/GHSA-v6h2-p8h4-qcjw",
+            "severity": "low",
+            "cwe": ["CWE-400"],
+            "cvss": {
+              "score": 3.1,
+              "vectorString": "CVSS:3.1/AV:N/AC:H/PR:L/UI:N/S:U/C:N/I:N/A:L"
+            },
+            "range": ">=1.0.0 <=1.1.11"
+          },
+          {
+            "source": 1105444,
+            "name": "brace-expansion",
+            "dependency": "brace-expansion",
+            "title": "brace-expansion Regular Expression Denial of Service vulnerability",
+            "url": "https://github.com/advisories/GHSA-v6h2-p8h4-qcjw",
+            "severity": "low",
+            "cwe": ["CWE-400"],
+            "cvss": {
+              "score": 3.1,
+              "vectorString": "CVSS:3.1/AV:N/AC:H/PR:L/UI:N/S:U/C:N/I:N/A:L"
+            },
+            "range": ">=2.0.0 <=2.0.1"
+          },
+          {
+            "source": 1115540,
+            "name": "brace-expansion",
+            "dependency": "brace-expansion",
+            "title": "brace-expansion: Zero-step sequence causes process hang and memory exhaustion",
+            "url": "https://github.com/advisories/GHSA-f886-m6hf-6m8v",
+            "severity": "moderate",
+            "cwe": ["CWE-400"],
+            "cvss": {
+              "score": 6.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:N/A:H"
+            },
+            "range": "<1.1.13"
+          },
+          {
+            "source": 1115541,
+            "name": "brace-expansion",
+            "dependency": "brace-expansion",
+            "title": "brace-expansion: Zero-step sequence causes process hang and memory exhaustion",
+            "url": "https://github.com/advisories/GHSA-f886-m6hf-6m8v",
+            "severity": "moderate",
+            "cwe": ["CWE-400"],
+            "cvss": {
+              "score": 6.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:N/A:H"
+            },
+            "range": ">=2.0.0 <2.0.3"
+          },
+          {
+            "source": 1123896,
+            "name": "brace-expansion",
+            "dependency": "brace-expansion",
+            "title": "brace-expansion: DoS via exponential-time expansion of consecutive non-expanding {} groups",
+            "url": "https://github.com/advisories/GHSA-3jxr-9vmj-r5cp",
+            "severity": "high",
+            "cwe": ["CWE-400", "CWE-407"],
+            "cvss": {
+              "score": 5.3,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+            },
+            "range": ">=2.0.0 <2.1.2"
+          },
+          {
+            "source": 1123897,
+            "name": "brace-expansion",
+            "dependency": "brace-expansion",
+            "title": "brace-expansion: DoS via exponential-time expansion of consecutive non-expanding {} groups",
+            "url": "https://github.com/advisories/GHSA-3jxr-9vmj-r5cp",
+            "severity": "high",
+            "cwe": ["CWE-400", "CWE-407"],
+            "cvss": {
+              "score": 5.3,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+            },
+            "range": "<1.1.16"
+          },
+          {
+            "source": 1130588,
+            "name": "brace-expansion",
+            "dependency": "brace-expansion",
+            "title": "brace-expansion: DoS via unbounded expansion length causing an out-of-memory process crash",
+            "url": "https://github.com/advisories/GHSA-mh99-v99m-4gvg",
+            "severity": "high",
+            "cwe": ["CWE-400", "CWE-770"],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            "range": "<1.1.17"
+          },
+          {
+            "source": 1130589,
+            "name": "brace-expansion",
+            "dependency": "brace-expansion",
+            "title": "brace-expansion: DoS via unbounded expansion length causing an out-of-memory process crash",
+            "url": "https://github.com/advisories/GHSA-mh99-v99m-4gvg",
+            "severity": "high",
+            "cwe": ["CWE-400", "CWE-770"],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            "range": ">=2.0.0 <2.1.3"
+          },
+          {
+            "source": 1130736,
+            "name": "brace-expansion",
+            "dependency": "brace-expansion",
+            "title": "brace-expansion: DoS via unbounded intermediate arrays, bypassing the CVE-2026-14257 mitigation",
+            "url": "https://github.com/advisories/GHSA-rgw5-rvv9-x895",
+            "severity": "high",
+            "cwe": ["CWE-400", "CWE-770"],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            "range": ">=2.0.0 <2.1.4"
+          },
+          {
+            "source": 1130737,
+            "name": "brace-expansion",
+            "dependency": "brace-expansion",
+            "title": "brace-expansion: DoS via unbounded intermediate arrays, bypassing the CVE-2026-14257 mitigation",
+            "url": "https://github.com/advisories/GHSA-rgw5-rvv9-x895",
+            "severity": "high",
+            "cwe": ["CWE-400", "CWE-770"],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            "range": "<1.1.18"
+          }
+        ],
+        "effects": [],
+        "range": "<=1.1.17 || 2.0.0 - 2.1.3",
+        "nodes": [
+          "node_modules/@typescript-eslint/typescript-estree/node_modules/brace-expansion",
+          "node_modules/brace-expansion",
+          "node_modules/glob/node_modules/brace-expansion"
+        ],
+        "fixAvailable": true
+      },
+      "cookie": {
+        "name": "cookie",
+        "severity": "low",
+        "isDirect": false,
+        "via": [
+          {
+            "source": 1103907,
+            "name": "cookie",
+            "dependency": "cookie",
+            "title": "cookie accepts cookie name, path, and domain with out of bounds characters",
+            "url": "https://github.com/advisories/GHSA-pxg6-pf52-xh8x",
+            "severity": "low",
+            "cwe": ["CWE-74"],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": "<0.7.0"
+          }
+        ],
+        "effects": ["next-auth"],
+        "range": "<0.7.0",
+        "nodes": ["node_modules/cookie"],
+        "fixAvailable": true
+      },
+      "cross-spawn": {
+        "name": "cross-spawn",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          {
+            "source": 1104664,
+            "name": "cross-spawn",
+            "dependency": "cross-spawn",
+            "title": "Regular Expression Denial of Service (ReDoS) in cross-spawn",
+            "url": "https://github.com/advisories/GHSA-3xgq-45jj-v275",
+            "severity": "high",
+            "cwe": ["CWE-1333"],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            "range": ">=7.0.0 <7.0.5"
+          }
+        ],
+        "effects": [],
+        "range": "7.0.0 - 7.0.4",
+        "nodes": ["node_modules/cross-spawn"],
+        "fixAvailable": true
+      },
+      "esbuild": {
+        "name": "esbuild",
+        "severity": "moderate",
+        "isDirect": false,
+        "via": [
+          {
+            "source": 1102341,
+            "name": "esbuild",
+            "dependency": "esbuild",
+            "title": "esbuild enables any website to send any requests to the development server and read the response",
+            "url": "https://github.com/advisories/GHSA-67mh-4wv8-2f99",
+            "severity": "moderate",
+            "cwe": ["CWE-346"],
+            "cvss": {
+              "score": 5.3,
+              "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:H/I:N/A:N"
+            },
+            "range": "<=0.24.2"
+          }
+        ],
+        "effects": ["vite"],
+        "range": "<=0.24.2",
+        "nodes": ["node_modules/esbuild"],
+        "fixAvailable": {
+          "name": "vitest",
+          "version": "5.0.0",
+          "isSemVerMajor": true
+        }
+      },
+      "eslint-config-next": {
+        "name": "eslint-config-next",
+        "severity": "high",
+        "isDirect": true,
+        "via": ["@next/eslint-plugin-next"],
+        "effects": [],
+        "range": "14.0.5-canary.0 - 15.0.0-rc.1",
+        "nodes": ["node_modules/eslint-config-next"],
+        "fixAvailable": {
+          "name": "eslint-config-next",
+          "version": "16.3.4",
+          "isSemVerMajor": true
+        }
+      },
+      "fflate": {
+        "name": "fflate",
+        "severity": "moderate",
+        "isDirect": false,
+        "via": [
+          {
+            "source": 1164783,
+            "name": "fflate",
+            "dependency": "fflate",
+            "title": "fflate unzipSync can enter an infinite loop when parsing malformed ZIP64 archives",
+            "url": "https://github.com/advisories/GHSA-px8p-9vwx-vf98",
+            "severity": "moderate",
+            "cwe": ["CWE-400"],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            "range": ">=0.7.0 <0.7.5"
+          }
+        ],
+        "effects": [],
+        "range": "0.7.0 - 0.7.4",
+        "nodes": ["node_modules/fflate"],
+        "fixAvailable": true
+      },
+      "flatted": {
+        "name": "flatted",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          {
+            "source": 1114526,
+            "name": "flatted",
+            "dependency": "flatted",
+            "title": "flatted vulnerable to unbounded recursion DoS in parse() revive phase",
+            "url": "https://github.com/advisories/GHSA-25h7-pfq9-p65f",
+            "severity": "high",
+            "cwe": ["CWE-674"],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            "range": "<3.4.0"
+          },
+          {
+            "source": 1115357,
+            "name": "flatted",
+            "dependency": "flatted",
+            "title": "Prototype Pollution via parse() in NodeJS flatted",
+            "url": "https://github.com/advisories/GHSA-rf6f-7fwh-wjgh",
+            "severity": "high",
+            "cwe": ["CWE-1321"],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": "<=3.4.1"
+          }
+        ],
+        "effects": [],
+        "range": "<=3.4.1",
+        "nodes": ["node_modules/flatted"],
+        "fixAvailable": true
+      },
+      "glob": {
+        "name": "glob",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          {
+            "source": 1109842,
+            "name": "glob",
+            "dependency": "glob",
+            "title": "glob CLI: Command injection via -c/--cmd executes matches with shell:true",
+            "url": "https://github.com/advisories/GHSA-5j98-mcp5-4vw2",
+            "severity": "high",
+            "cwe": ["CWE-78"],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:H/PR:L/UI:N/S:U/C:H/I:H/A:H"
+            },
+            "range": ">=10.2.0 <10.5.0"
+          }
+        ],
+        "effects": ["@next/eslint-plugin-next"],
+        "range": "10.2.0 - 10.4.5",
+        "nodes": ["node_modules/glob"],
+        "fixAvailable": {
+          "name": "eslint-config-next",
+          "version": "16.3.4",
+          "isSemVerMajor": true
+        }
+      },
+      "js-yaml": {
+        "name": "js-yaml",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          {
+            "source": 1112715,
+            "name": "js-yaml",
+            "dependency": "js-yaml",
+            "title": "js-yaml has prototype pollution in merge (<<)",
+            "url": "https://github.com/advisories/GHSA-mh29-5h37-fv8m",
+            "severity": "moderate",
+            "cwe": ["CWE-1321"],
+            "cvss": {
+              "score": 5.3,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:N"
+            },
+            "range": ">=4.0.0 <4.1.1"
+          },
+          {
+            "source": 1121860,
+            "name": "js-yaml",
+            "dependency": "js-yaml",
+            "title": "JS-YAML: Quadratic-complexity DoS in merge key handling via repeated aliases",
+            "url": "https://github.com/advisories/GHSA-h67p-54hq-rp68",
+            "severity": "moderate",
+            "cwe": ["CWE-407"],
+            "cvss": {
+              "score": 5.3,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+            },
+            "range": ">=4.0.0 <=4.1.1"
+          },
+          {
+            "source": 1123911,
+            "name": "js-yaml",
+            "dependency": "js-yaml",
+            "title": "js-yaml: YAML merge-key chains can force quadratic CPU consumption",
+            "url": "https://github.com/advisories/GHSA-52cp-r559-cp3m",
+            "severity": "high",
+            "cwe": ["CWE-400", "CWE-407"],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            "range": ">=4.0.0 <4.3.0"
+          },
+          {
+            "source": 1138115,
+            "name": "js-yaml",
+            "dependency": "js-yaml",
+            "title": "JS-YAML: Quadratic CPU consumption in !!omap resolution (3.x and 4.x) \u2014 CVE-2026-59870 fix not backported",
+            "url": "https://github.com/advisories/GHSA-5p4m-2wfm-xmqj",
+            "severity": "high",
+            "cwe": ["CWE-407"],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            "range": ">=4.0.0 <4.3.1"
+          }
+        ],
+        "effects": [],
+        "range": "4.0.0 - 4.3.0",
+        "nodes": ["node_modules/js-yaml"],
+        "fixAvailable": true
+      },
+      "micromatch": {
+        "name": "micromatch",
+        "severity": "moderate",
+        "isDirect": false,
+        "via": [
+          {
+            "source": 1098681,
+            "name": "micromatch",
+            "dependency": "micromatch",
+            "title": "Regular Expression Denial of Service (ReDoS) in micromatch",
+            "url": "https://github.com/advisories/GHSA-952p-6rrq-rcjv",
+            "severity": "moderate",
+            "cwe": ["CWE-1333"],
+            "cvss": {
+              "score": 5.3,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+            },
+            "range": "<4.0.8"
+          }
+        ],
+        "effects": [],
+        "range": "<4.0.8",
+        "nodes": ["node_modules/micromatch"],
+        "fixAvailable": true
+      },
+      "minimatch": {
+        "name": "minimatch",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          {
+            "source": 1113459,
+            "name": "minimatch",
+            "dependency": "minimatch",
+            "title": "minimatch has a ReDoS via repeated wildcards with non-matching literal in pattern",
+            "url": "https://github.com/advisories/GHSA-3ppc-4f35-3m26",
+            "severity": "high",
+            "cwe": ["CWE-1333"],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": "<3.1.3"
+          },
+          {
+            "source": 1113465,
+            "name": "minimatch",
+            "dependency": "minimatch",
+            "title": "minimatch has a ReDoS via repeated wildcards with non-matching literal in pattern",
+            "url": "https://github.com/advisories/GHSA-3ppc-4f35-3m26",
+            "severity": "high",
+            "cwe": ["CWE-1333"],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": ">=9.0.0 <9.0.6"
+          },
+          {
+            "source": 1113538,
+            "name": "minimatch",
+            "dependency": "minimatch",
+            "title": "minimatch has ReDoS: matchOne() combinatorial backtracking via multiple non-adjacent GLOBSTAR segments",
+            "url": "https://github.com/advisories/GHSA-7r86-cg39-jmmj",
+            "severity": "high",
+            "cwe": ["CWE-407"],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            "range": "<3.1.3"
+          },
+          {
+            "source": 1113544,
+            "name": "minimatch",
+            "dependency": "minimatch",
+            "title": "minimatch has ReDoS: matchOne() combinatorial backtracking via multiple non-adjacent GLOBSTAR segments",
+            "url": "https://github.com/advisories/GHSA-7r86-cg39-jmmj",
+            "severity": "high",
+            "cwe": ["CWE-407"],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            "range": ">=9.0.0 <9.0.7"
+          },
+          {
+            "source": 1113546,
+            "name": "minimatch",
+            "dependency": "minimatch",
+            "title": "minimatch ReDoS: nested *() extglobs generate catastrophically backtracking regular expressions",
+            "url": "https://github.com/advisories/GHSA-23c5-xmqv-rm74",
+            "severity": "high",
+            "cwe": ["CWE-1333"],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            "range": "<3.1.4"
+          },
+          {
+            "source": 1113552,
+            "name": "minimatch",
+            "dependency": "minimatch",
+            "title": "minimatch ReDoS: nested *() extglobs generate catastrophically backtracking regular expressions",
+            "url": "https://github.com/advisories/GHSA-23c5-xmqv-rm74",
+            "severity": "high",
+            "cwe": ["CWE-1333"],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            "range": ">=9.0.0 <9.0.7"
+          }
+        ],
+        "effects": ["@typescript-eslint/typescript-estree"],
+        "range": "<=3.1.3 || 9.0.0 - 9.0.6",
+        "nodes": [
+          "node_modules/@typescript-eslint/typescript-estree/node_modules/minimatch",
+          "node_modules/glob/node_modules/minimatch",
+          "node_modules/minimatch"
+        ],
+        "fixAvailable": true
+      },
+      "next": {
+        "name": "next",
+        "severity": "critical",
+        "isDirect": true,
+        "via": [
+          {
+            "source": 1099638,
+            "name": "next",
+            "dependency": "next",
+            "title": "Next.js Cache Poisoning",
+            "url": "https://github.com/advisories/GHSA-gp8f-8m3g-qvj9",
+            "severity": "high",
+            "cwe": ["CWE-349", "CWE-639"],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            "range": ">=14.0.0 <14.2.10"
+          },
+          {
+            "source": 1100421,
+            "name": "next",
+            "dependency": "next",
+            "title": "Denial of Service condition in Next.js image optimization",
+            "url": "https://github.com/advisories/GHSA-g77x-44xx-532m",
+            "severity": "moderate",
+            "cwe": ["CWE-674"],
+            "cvss": {
+              "score": 5.9,
+              "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            "range": ">=10.0.0 <14.2.7"
+          },
+          {
+            "source": 1101438,
+            "name": "next",
+            "dependency": "next",
+            "title": "Next.js Allows a Denial of Service (DoS) with Server Actions",
+            "url": "https://github.com/advisories/GHSA-7m27-7ghc-44w9",
+            "severity": "moderate",
+            "cwe": ["CWE-770"],
+            "cvss": {
+              "score": 5.3,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+            },
+            "range": ">=14.0.0 <14.2.21"
+          },
+          {
+            "source": 1105461,
+            "name": "next",
+            "dependency": "next",
+            "title": "Information exposure in Next.js dev server due to lack of origin verification",
+            "url": "https://github.com/advisories/GHSA-3h52-269p-cp9r",
+            "severity": "low",
+            "cwe": ["CWE-1385"],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": ">=13.0 <14.2.30"
+          },
+          {
+            "source": 1107226,
+            "name": "next",
+            "dependency": "next",
+            "title": "Next.js Affected by Cache Key Confusion for Image Optimization API Routes",
+            "url": "https://github.com/advisories/GHSA-g5qg-72qw-gw5v",
+            "severity": "moderate",
+            "cwe": ["CWE-524"],
+            "cvss": {
+              "score": 6.2,
+              "vectorString": "CVSS:3.1/AV:L/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N"
+            },
+            "range": ">=0.9.9 <14.2.31"
+          },
+          {
+            "source": 1107420,
+            "name": "next",
+            "dependency": "next",
+            "title": "Next.js authorization bypass vulnerability",
+            "url": "https://github.com/advisories/GHSA-7gfc-8cq8-jh5f",
+            "severity": "high",
+            "cwe": ["CWE-285", "CWE-863"],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N"
+            },
+            "range": ">=9.5.5 <14.2.15"
+          },
+          {
+            "source": 1107512,
+            "name": "next",
+            "dependency": "next",
+            "title": "Next.js Improper Middleware Redirect Handling Leads to SSRF",
+            "url": "https://github.com/advisories/GHSA-4342-x723-ch2f",
+            "severity": "moderate",
+            "cwe": ["CWE-918"],
+            "cvss": {
+              "score": 6.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:L/A:N"
+            },
+            "range": ">=0.9.9 <14.2.32"
+          },
+          {
+            "source": 1107513,
+            "name": "next",
+            "dependency": "next",
+            "title": "Next.js Content Injection Vulnerability for Image Optimization",
+            "url": "https://github.com/advisories/GHSA-xv57-4mr9-wg8v",
+            "severity": "moderate",
+            "cwe": ["CWE-20"],
+            "cvss": {
+              "score": 4.3,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:L/A:N"
+            },
+            "range": ">=0.9.9 <14.2.31"
+          },
+          {
+            "source": 1108291,
+            "name": "next",
+            "dependency": "next",
+            "title": "Next.js Race Condition to Cache Poisoning",
+            "url": "https://github.com/advisories/GHSA-qpjv-v59x-3qc4",
+            "severity": "low",
+            "cwe": ["CWE-362"],
+            "cvss": {
+              "score": 3.7,
+              "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:L/I:N/A:N"
+            },
+            "range": ">=0.9.9 <14.2.24"
+          },
+          {
+            "source": 1111391,
+            "name": "next",
+            "dependency": "next",
+            "title": "Next Vulnerable to Denial of Service with Server Components",
+            "url": "https://github.com/advisories/GHSA-mwv6-3258-q52c",
+            "severity": "high",
+            "cwe": ["CWE-400", "CWE-502", "CWE-1395"],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            "range": ">=13.3.0 <14.2.34"
+          },
+          {
+            "source": 1112182,
+            "name": "next",
+            "dependency": "next",
+            "title": "Next has a Denial of Service with Server Components - Incomplete Fix Follow-Up",
+            "url": "https://github.com/advisories/GHSA-5j59-xgg2-r9c4",
+            "severity": "high",
+            "cwe": ["CWE-400", "CWE-502", "CWE-1395"],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            "range": ">=13.3.1-canary.0 <14.2.35"
+          },
+          {
+            "source": 1112593,
+            "name": "next",
+            "dependency": "next",
+            "title": "Next.js self-hosted applications vulnerable to DoS via Image Optimizer remotePatterns configuration",
+            "url": "https://github.com/advisories/GHSA-9g9p-9gw9-jx7f",
+            "severity": "moderate",
+            "cwe": ["CWE-400", "CWE-770"],
+            "cvss": {
+              "score": 5.9,
+              "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            "range": ">=10.0.0 <15.5.10"
+          },
+          {
+            "source": 1112653,
+            "name": "next",
+            "dependency": "next",
+            "title": "Next.js HTTP request deserialization can lead to DoS when using insecure React Server Components",
+            "url": "https://github.com/advisories/GHSA-h25m-26qc-wcjf",
+            "severity": "high",
+            "cwe": ["CWE-400", "CWE-502"],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            "range": ">=13.0.0 <15.0.8"
+          },
+          {
+            "source": 1113689,
+            "name": "next",
+            "dependency": "next",
+            "title": "Authorization Bypass in Next.js Middleware",
+            "url": "https://github.com/advisories/GHSA-f82v-jwr5-mffw",
+            "severity": "critical",
+            "cwe": ["CWE-285", "CWE-863"],
+            "cvss": {
+              "score": 9.1,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N"
+            },
+            "range": ">=14.0.0 <14.2.25"
+          },
+          {
+            "source": 1114897,
+            "name": "next",
+            "dependency": "next",
+            "title": "Next.js: HTTP request smuggling in rewrites",
+            "url": "https://github.com/advisories/GHSA-ggv3-7p47-pfv8",
+            "severity": "moderate",
+            "cwe": ["CWE-444"],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": ">=9.5.0 <15.5.13"
+          },
+          {
+            "source": 1114940,
+            "name": "next",
+            "dependency": "next",
+            "title": "Next.js: Unbounded next/image disk cache growth can exhaust storage",
+            "url": "https://github.com/advisories/GHSA-3x4c-7xq6-9pq8",
+            "severity": "moderate",
+            "cwe": ["CWE-400"],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": ">=10.0.0 <15.5.14"
+          },
+          {
+            "source": 1116376,
+            "name": "next",
+            "dependency": "next",
+            "title": "Next.js has a Denial of Service with Server Components",
+            "url": "https://github.com/advisories/GHSA-q4gf-8mx6-v5v3",
+            "severity": "high",
+            "cwe": ["CWE-770"],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            "range": ">=13.0.0 <15.5.15"
+          },
+          {
+            "source": 1117931,
+            "name": "next",
+            "dependency": "next",
+            "title": "Next.js Vulnerable to Denial of Service with Server Components",
+            "url": "https://github.com/advisories/GHSA-8h8q-6873-q5fj",
+            "severity": "high",
+            "cwe": ["CWE-770"],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            "range": ">=13.0.0 <15.5.16"
+          },
+          {
+            "source": 1118942,
+            "name": "next",
+            "dependency": "next",
+            "title": "Next.js's Middleware / Proxy redirects can be cache-poisoned",
+            "url": "https://github.com/advisories/GHSA-3g8h-86w9-wvmq",
+            "severity": "low",
+            "cwe": ["CWE-349"],
+            "cvss": {
+              "score": 3.7,
+              "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:L"
+            },
+            "range": ">=12.2.0 <15.5.16"
+          },
+          {
+            "source": 1118944,
+            "name": "next",
+            "dependency": "next",
+            "title": "Next.js vulnerable to cross-site scripting in App Router applications using CSP nonces",
+            "url": "https://github.com/advisories/GHSA-ffhc-5mcf-pf4q",
+            "severity": "moderate",
+            "cwe": ["CWE-79"],
+            "cvss": {
+              "score": 4.7,
+              "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:C/C:L/I:L/A:N"
+            },
+            "range": ">=13.4.0 <15.5.16"
+          },
+          {
+            "source": 1118946,
+            "name": "next",
+            "dependency": "next",
+            "title": "Next.js vulnerable to cache poisoning via collisions in React Server Component cache-busting",
+            "url": "https://github.com/advisories/GHSA-vfv6-92ff-j949",
+            "severity": "low",
+            "cwe": ["CWE-328"],
+            "cvss": {
+              "score": 3.7,
+              "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:L/A:N"
+            },
+            "range": ">=13.4.6 <15.5.16"
+          },
+          {
+            "source": 1118948,
+            "name": "next",
+            "dependency": "next",
+            "title": "Next.js has cross-site scripting in beforeInteractive scripts with untrusted input",
+            "url": "https://github.com/advisories/GHSA-gx5p-jg67-6x7h",
+            "severity": "moderate",
+            "cwe": ["CWE-79"],
+            "cvss": {
+              "score": 6.1,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N"
+            },
+            "range": ">=13.0.0 <15.5.16"
+          },
+          {
+            "source": 1118952,
+            "name": "next",
+            "dependency": "next",
+            "title": "Next.js has a Denial of Service in the Image Optimization API",
+            "url": "https://github.com/advisories/GHSA-h64f-5h5j-jqjh",
+            "severity": "moderate",
+            "cwe": ["CWE-770"],
+            "cvss": {
+              "score": 5.9,
+              "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            "range": ">=10.0.0 <15.5.16"
+          },
+          {
+            "source": 1118954,
+            "name": "next",
+            "dependency": "next",
+            "title": "Next.js vulnerable to server-side request forgery in applications using WebSocket upgrades",
+            "url": "https://github.com/advisories/GHSA-c4j6-fc7j-m34r",
+            "severity": "high",
+            "cwe": ["CWE-918"],
+            "cvss": {
+              "score": 8.6,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:N/A:N"
+            },
+            "range": ">=13.4.13 <15.5.16"
+          },
+          {
+            "source": 1118958,
+            "name": "next",
+            "dependency": "next",
+            "title": "Next.js vulnerable to cache poisoning in React Server Component responses",
+            "url": "https://github.com/advisories/GHSA-wfc6-r584-vfw7",
+            "severity": "moderate",
+            "cwe": ["CWE-436"],
+            "cvss": {
+              "score": 5.4,
+              "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:C/C:N/I:L/A:L"
+            },
+            "range": ">=14.2.0 <15.5.16"
+          },
+          {
+            "source": 1118962,
+            "name": "next",
+            "dependency": "next",
+            "title": "Next.js has a Middleware / Proxy bypass in Pages Router applications using i18n",
+            "url": "https://github.com/advisories/GHSA-36qx-fr4f-26g5",
+            "severity": "high",
+            "cwe": ["CWE-863"],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N"
+            },
+            "range": ">=12.2.0 <15.5.16"
+          },
+          {
+            "source": 1124172,
+            "name": "next",
+            "dependency": "next",
+            "title": "Next.js: Denial of Service in App Router using Server Actions",
+            "url": "https://github.com/advisories/GHSA-m99w-x7hq-7vfj",
+            "severity": "high",
+            "cwe": ["CWE-834"],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": ">=13.0.0 <15.5.21"
+          },
+          {
+            "source": 1124185,
+            "name": "next",
+            "dependency": "next",
+            "title": "Next.js: Server-Side Request Forgery in Server Actions on custom servers",
+            "url": "https://github.com/advisories/GHSA-89xv-2m56-2m9x",
+            "severity": "high",
+            "cwe": ["CWE-918"],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": ">=14.1.1 <15.5.21"
+          },
+          {
+            "source": 1124187,
+            "name": "next",
+            "dependency": "next",
+            "title": "Next.js: Cache confusion of response bodies for requests with bodies",
+            "url": "https://github.com/advisories/GHSA-68g3-v927-f742",
+            "severity": "moderate",
+            "cwe": ["CWE-524"],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": ">=13.0.0 <15.5.21"
+          },
+          {
+            "source": 1124189,
+            "name": "next",
+            "dependency": "next",
+            "title": "Next.js: Cache confusion of response bodies for requests with bodies containing invalid UTF-8 byte sequences",
+            "url": "https://github.com/advisories/GHSA-4633-3j49-mh5q",
+            "severity": "moderate",
+            "cwe": ["CWE-116"],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": ">=13.0.0 <15.5.21"
+          },
+          {
+            "source": 1124191,
+            "name": "next",
+            "dependency": "next",
+            "title": "Next.js: Unbounded Server Action payload in Edge runtime",
+            "url": "https://github.com/advisories/GHSA-4c39-4ccg-62r3",
+            "severity": "moderate",
+            "cwe": ["CWE-770"],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": ">=13.0.0 <15.5.21"
+          },
+          {
+            "source": 1124193,
+            "name": "next",
+            "dependency": "next",
+            "title": "Next.js: Server-Side Request Forgery in rewrites via attacker-controlled destination hostname",
+            "url": "https://github.com/advisories/GHSA-p9j2-gv94-2wf4",
+            "severity": "high",
+            "cwe": ["CWE-918"],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": ">=12.0.0 <15.5.21"
+          },
+          {
+            "source": 1124197,
+            "name": "next",
+            "dependency": "next",
+            "title": "Next.js: Unauthenticated disclosure of internal Server Function endpoints",
+            "url": "https://github.com/advisories/GHSA-955p-x3mx-jcvp",
+            "severity": "moderate",
+            "cwe": ["CWE-201"],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": ">=13.0.0 <15.5.21"
+          },
+          "postcss"
+        ],
+        "effects": [],
+        "range": "0.9.9 - 16.3.0-preview.10",
+        "nodes": ["node_modules/next"],
+        "fixAvailable": {
+          "name": "next",
+          "version": "14.2.35",
+          "isSemVerMajor": false
+        }
+      },
+      "next-auth": {
+        "name": "next-auth",
+        "severity": "critical",
+        "isDirect": true,
+        "via": [
+          {
+            "source": 1109305,
+            "name": "next-auth",
+            "dependency": "next-auth",
+            "title": "NextAuthjs Email misdelivery Vulnerability",
+            "url": "https://github.com/advisories/GHSA-5jpx-9hw9-2fx4",
+            "severity": "moderate",
+            "cwe": ["CWE-200"],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": "<4.24.12"
+          },
+          {
+            "source": 1139362,
+            "name": "next-auth",
+            "dependency": "next-auth",
+            "title": "Auth.js: Email normalizer validates the address before Unicode normalization, allowing a homoglyph @ bypass",
+            "url": "https://github.com/advisories/GHSA-7rqj-j65f-68wh",
+            "severity": "critical",
+            "cwe": ["CWE-180"],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": ">=4.10.3 <4.24.15"
+          },
+          {
+            "source": 1139570,
+            "name": "next-auth",
+            "dependency": "next-auth",
+            "title": "Auth.js: getToken() throws an uncaught exception on malformed Bearer authorization headers",
+            "url": "https://github.com/advisories/GHSA-xmf8-cvqr-rfgj",
+            "severity": "high",
+            "cwe": ["CWE-20"],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            "range": ">=4.0.6 <=4.24.14"
+          },
+          {
+            "source": 1139573,
+            "name": "next-auth",
+            "dependency": "next-auth",
+            "title": "Auth.js: OAuth state, nonce, and PKCE check cookies are not bound to the provider that created them",
+            "url": "https://github.com/advisories/GHSA-x445-f3h2-j279",
+            "severity": "moderate",
+            "cwe": ["CWE-345", "CWE-346", "CWE-940"],
+            "cvss": {
+              "score": 6.8,
+              "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:H/I:H/A:N"
+            },
+            "range": "<=4.24.14"
+          },
+          "cookie",
+          "uuid"
+        ],
+        "effects": [],
+        "range": "<=4.24.14",
+        "nodes": ["node_modules/next-auth"],
+        "fixAvailable": true
+      },
+      "picomatch": {
+        "name": "picomatch",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          {
+            "source": 1115549,
+            "name": "picomatch",
+            "dependency": "picomatch",
+            "title": "Picomatch: Method Injection in POSIX Character Classes causes incorrect Glob Matching",
+            "url": "https://github.com/advisories/GHSA-3v7f-55p6-f55p",
+            "severity": "moderate",
+            "cwe": ["CWE-1321"],
+            "cvss": {
+              "score": 5.3,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:N"
+            },
+            "range": "<2.3.2"
+          },
+          {
+            "source": 1115552,
+            "name": "picomatch",
+            "dependency": "picomatch",
+            "title": "Picomatch has a ReDoS vulnerability via extglob quantifiers",
+            "url": "https://github.com/advisories/GHSA-c2c7-rcm5-vvqj",
+            "severity": "high",
+            "cwe": ["CWE-1333"],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            "range": "<2.3.2"
+          }
+        ],
+        "effects": [],
+        "range": "<=2.3.1",
+        "nodes": ["node_modules/picomatch"],
+        "fixAvailable": true
+      },
+      "postcss": {
+        "name": "postcss",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          {
+            "source": 1117015,
+            "name": "postcss",
+            "dependency": "postcss",
+            "title": "PostCSS has XSS via Unescaped </style> in its CSS Stringify Output",
+            "url": "https://github.com/advisories/GHSA-qx2v-qp2m-jg93",
+            "severity": "moderate",
+            "cwe": ["CWE-79"],
+            "cvss": {
+              "score": 6.1,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N"
+            },
+            "range": "<8.5.10"
+          },
+          {
+            "source": 1124252,
+            "name": "postcss",
+            "dependency": "postcss",
+            "title": "PostCSS: Arbitrary file read and information disclosure via attacker-controlled sourceMappingURL in CSS comments",
+            "url": "https://github.com/advisories/GHSA-6g55-p6wh-862q",
+            "severity": "high",
+            "cwe": ["CWE-22", "CWE-200"],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N"
+            },
+            "range": "<=8.5.11"
+          },
+          {
+            "source": 1130709,
+            "name": "postcss",
+            "dependency": "postcss",
+            "title": "PostCSS: incomplete fix of GHSA-6g55-p6wh-862q \u2014 attacker-controlled sourceMappingURL reads arbitrary .map files when `from` is unset",
+            "url": "https://github.com/advisories/GHSA-fxqj-rqcc-2cmp",
+            "severity": "moderate",
+            "cwe": ["CWE-22", "CWE-200"],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": "<=8.5.22"
+          },
+          {
+            "source": 1139510,
+            "name": "postcss",
+            "dependency": "postcss",
+            "title": "PostCSS: Path Traversal in Previous Source Map Auto-Loading (sourceMappingURL) leads to Arbitrary .map File Disclosure",
+            "url": "https://github.com/advisories/GHSA-r28c-9q8g-f849",
+            "severity": "high",
+            "cwe": ["CWE-22"],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N"
+            },
+            "range": "<=8.5.17"
+          }
+        ],
+        "effects": ["next"],
+        "range": "<=8.5.22",
+        "nodes": ["node_modules/next/node_modules/postcss"],
+        "fixAvailable": {
+          "name": "next",
+          "version": "14.2.35",
+          "isSemVerMajor": false
+        }
+      },
+      "postcss-selector-parser": {
+        "name": "postcss-selector-parser",
+        "severity": "low",
+        "isDirect": false,
+        "via": [
+          {
+            "source": 1153170,
+            "name": "postcss-selector-parser",
+            "dependency": "postcss-selector-parser",
+            "title": "postcss-selector-parser allows denial of service through uncontrolled AST recursion",
+            "url": "https://github.com/advisories/GHSA-w9m9-85wc-3x92",
+            "severity": "low",
+            "cwe": ["CWE-404"],
+            "cvss": {
+              "score": 4.3,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:N/A:L"
+            },
+            "range": ">=6.1.0 <6.1.3"
+          }
+        ],
+        "effects": [],
+        "range": "6.1.0 - 6.1.2",
+        "nodes": ["node_modules/postcss-selector-parser"],
+        "fixAvailable": true
+      },
+      "sharp": {
+        "name": "sharp",
+        "severity": "high",
+        "isDirect": true,
+        "via": [
+          {
+            "source": 1124066,
+            "name": "sharp",
+            "dependency": "sharp",
+            "title": "sharp inherited vulnerabilities in libvips: CVE-2026-33327, CVE-2026-33328, CVE-2026-35590, CVE-2026-35591",
+            "url": "https://github.com/advisories/GHSA-f88m-g3jw-g9cj",
+            "severity": "high",
+            "cwe": ["CWE-1395"],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": "<0.35.0"
+          }
+        ],
+        "effects": [],
+        "range": "<0.35.0",
+        "nodes": ["node_modules/sharp"],
+        "fixAvailable": {
+          "name": "sharp",
+          "version": "0.35.4",
+          "isSemVerMajor": true
+        }
+      },
+      "uuid": {
+        "name": "uuid",
+        "severity": "moderate",
+        "isDirect": false,
+        "via": [
+          {
+            "source": 1119441,
+            "name": "uuid",
+            "dependency": "uuid",
+            "title": "uuid: Missing buffer bounds check in v3/v5/v6 when buf is provided",
+            "url": "https://github.com/advisories/GHSA-w5hq-g745-h8pq",
+            "severity": "moderate",
+            "cwe": ["CWE-787", "CWE-1285"],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:H/A:N"
+            },
+            "range": "<11.1.1"
+          }
+        ],
+        "effects": ["next-auth"],
+        "range": "<11.1.1",
+        "nodes": ["node_modules/uuid"],
+        "fixAvailable": true
+      },
+      "vite": {
+        "name": "vite",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          {
+            "source": 1116229,
+            "name": "vite",
+            "dependency": "vite",
+            "title": "Vite Vulnerable to Path Traversal in Optimized Deps `.map` Handling",
+            "url": "https://github.com/advisories/GHSA-4w7w-66w2-5vf9",
+            "severity": "moderate",
+            "cwe": ["CWE-22", "CWE-200"],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": "<=6.4.1"
+          },
+          {
+            "source": 1120784,
+            "name": "vite",
+            "dependency": "vite",
+            "title": "launch-editor: NTLMv2 hash disclosure via UNC path handling on Windows",
+            "url": "https://github.com/advisories/GHSA-v6wh-96g9-6wx3",
+            "severity": "moderate",
+            "cwe": ["CWE-73", "CWE-522"],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": "<=6.4.2"
+          },
+          {
+            "source": 1123525,
+            "name": "vite",
+            "dependency": "vite",
+            "title": "vite: `server.fs.deny` bypass on Windows alternate paths",
+            "url": "https://github.com/advisories/GHSA-fx2h-pf6j-xcff",
+            "severity": "high",
+            "cwe": ["CWE-22", "CWE-200"],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N"
+            },
+            "range": "<=6.4.2"
+          },
+          "esbuild"
+        ],
+        "effects": ["vite-node", "vitest"],
+        "range": "<=6.4.2",
+        "nodes": ["node_modules/vite"],
+        "fixAvailable": {
+          "name": "vitest",
+          "version": "5.0.0",
+          "isSemVerMajor": true
+        }
+      },
+      "vite-node": {
+        "name": "vite-node",
+        "severity": "moderate",
+        "isDirect": false,
+        "via": ["vite"],
+        "effects": ["vitest"],
+        "range": "<=2.2.0-beta.2",
+        "nodes": ["node_modules/vite-node"],
+        "fixAvailable": {
+          "name": "vitest",
+          "version": "5.0.0",
+          "isSemVerMajor": true
+        }
+      },
+      "vitest": {
+        "name": "vitest",
+        "severity": "critical",
+        "isDirect": true,
+        "via": [
+          {
+            "source": 1139528,
+            "name": "vitest",
+            "dependency": "vitest",
+            "title": "When Vitest UI server is listening, arbitrary file can be read and executed",
+            "url": "https://github.com/advisories/GHSA-5xrq-8626-4rwp",
+            "severity": "critical",
+            "cwe": ["CWE-22", "CWE-862"],
+            "cvss": {
+              "score": 9.8,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
+            },
+            "range": "<3.2.6"
+          },
+          "vite",
+          "vite-node"
+        ],
+        "effects": [],
+        "range": "<=3.2.5",
+        "nodes": ["node_modules/vitest"],
+        "fixAvailable": {
+          "name": "vitest",
+          "version": "5.0.0",
+          "isSemVerMajor": true
+        }
+      },
+      "yaml": {
+        "name": "yaml",
+        "severity": "moderate",
+        "isDirect": false,
+        "via": [
+          {
+            "source": 1115556,
+            "name": "yaml",
+            "dependency": "yaml",
+            "title": "yaml is vulnerable to Stack Overflow via deeply nested YAML collections",
+            "url": "https://github.com/advisories/GHSA-48c2-rrv3-qjmp",
+            "severity": "moderate",
+            "cwe": ["CWE-674"],
+            "cvss": {
+              "score": 4.3,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:L"
+            },
+            "range": ">=2.0.0 <2.8.3"
+          }
+        ],
+        "effects": [],
+        "range": "2.0.0 - 2.8.2",
+        "nodes": ["node_modules/yaml"],
+        "fixAvailable": true
+      }
+    },
+    "metadata": {
+      "vulnerabilities": {
+        "info": 0,
+        "low": 2,
+        "moderate": 8,
+        "high": 14,
+        "critical": 3,
+        "total": 27
+      },
+      "dependencies": {
+        "prod": 130,
+        "dev": 549,
+        "optional": 80,
+        "peer": 0,
+        "peerOptional": 0,
+        "total": 707
+      }
+    }
+  },
+  "audit_after": {
+    "auditReportVersion": 2,
+    "vulnerabilities": {},
+    "metadata": {
+      "vulnerabilities": {
+        "info": 0,
+        "low": 0,
+        "moderate": 0,
+        "high": 0,
+        "critical": 0,
+        "total": 0
+      },
+      "dependencies": {
+        "prod": 123,
+        "dev": 538,
+        "optional": 115,
+        "peer": 0,
+        "peerOptional": 0,
+        "total": 695
+      }
+    }
+  },
+  "tests": {
+    "total": 252,
+    "passed": 252,
+    "failed": 0,
+    "files": [
+      {
+        "path": "tests/(landingpage)/landingpage.test.tsx",
+        "status": "passed",
+        "assertions": [
+          {
+            "name": "Landing Page Components FAQ Component asserts exactly one panel is open and aria-expanded toggles",
+            "status": "passed"
+          },
+          {
+            "name": "Landing Page Components Newsletter Component asserts an invalid email never shows the success toast",
+            "status": "passed"
+          },
+          {
+            "name": "Landing Page Components Newsletter Component shows success toast when email is provided and clears input",
+            "status": "passed"
+          },
+          {
+            "name": "Landing Page Components ContactUs Component asserts a mock sendMail rejection renders the error message",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "path": "tests/context/CartContext.hydration.test.jsx",
+        "status": "passed",
+        "assertions": [
+          {
+            "name": "CartProvider hydration race (Issue #71) keeps previously stored cart items plus the new item when added before hydration effect resolves",
+            "status": "passed"
+          },
+          {
+            "name": "CartProvider hydration race (Issue #71) preserves multiple stored items when multiple pre-hydration additions occur",
+            "status": "passed"
+          },
+          {
+            "name": "CartProvider hydration race (Issue #71) handles pre-hydration adds when localStorage starts completely empty",
+            "status": "passed"
+          },
+          {
+            "name": "CartProvider hydration race (Issue #71) handles pre-hydration removals correctly from stored items",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "path": "tests/context/CartContext.test.jsx",
+        "status": "passed",
+        "assertions": [
+          {
+            "name": "CartProvider hydration error handling mounts without throwing and falls back to empty cart when cartItems is corrupt JSON",
+            "status": "passed"
+          },
+          {
+            "name": "CartProvider hydration error handling safely ignores non-array JSON stored in cartItems",
+            "status": "passed"
+          },
+          {
+            "name": "CartProvider hydration error handling hydrates valid cart items and totals cleanly",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "path": "tests/context/CartContext.test.tsx",
+        "status": "passed",
+        "assertions": [
+          {
+            "name": "CartContext removeFromCart adds and removes items correctly",
+            "status": "passed"
+          },
+          {
+            "name": "CartContext removeFromCart leaves itemCount and totalPrice unchanged when removing an item not in the cart",
+            "status": "passed"
+          },
+          {
+            "name": "CartContext removeFromCart repeated remove calls can never produce a negative itemCount or totalPrice",
+            "status": "passed"
+          },
+          {
+            "name": "CartContext removeFromCart assigns unique cartItemId to duplicate items and removes specific instance (lower row)",
+            "status": "passed"
+          },
+          {
+            "name": "CartContext removeFromCart removes upper duplicate row and leaves lower row intact",
+            "status": "passed"
+          },
+          {
+            "name": "CartContext removeFromCart supports removal by cartItemId string directly",
+            "status": "passed"
+          },
+          {
+            "name": "CartContext removeFromCart ensures legacy items loaded from localStorage without cartItemId are assigned unique cartItemIds",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "path": "tests/context/CartModalDuplicateRows.test.jsx",
+        "status": "passed",
+        "assertions": [
+          {
+            "name": "Cart duplicate rows UI & keys renders duplicate line items with unique keys without console duplicate-key warnings",
+            "status": "passed"
+          },
+          {
+            "name": "Cart duplicate rows UI & keys removes lower duplicate row leaving upper row intact",
+            "status": "passed"
+          },
+          {
+            "name": "Cart duplicate rows UI & keys removes upper duplicate row leaving lower row intact",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "path": "tests/components/AuthPage.test.tsx",
+        "status": "passed",
+        "assertions": [
+          {
+            "name": "AuthPage - Google OAuth Loading & Disabled State disables Google button while loginWithGoogle is pending and calls it once on multiple clicks",
+            "status": "passed"
+          },
+          {
+            "name": "AuthPage - Google OAuth Loading & Disabled State re-enables Google button and surfaces error when loginWithGoogle rejects",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "path": "tests/components/ContactUs.test.tsx",
+        "status": "passed",
+        "assertions": [
+          {
+            "name": "ContactUs component renders the contact form properly",
+            "status": "passed"
+          },
+          {
+            "name": "ContactUs component shows persistent error message when sendMail fails",
+            "status": "passed"
+          },
+          {
+            "name": "ContactUs component clears the error message when a subsequent submission succeeds",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "path": "tests/components/Modal.test.jsx",
+        "status": "passed",
+        "assertions": [
+          {
+            "name": "Modal component renders nothing when show is false",
+            "status": "passed"
+          },
+          {
+            "name": "Modal component renders children and close button when show is true",
+            "status": "passed"
+          },
+          {
+            "name": "Modal component calls onClose exactly once when the close button is clicked",
+            "status": "passed"
+          },
+          {
+            "name": "Modal component removes subtree when re-rendered with show=false",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "path": "tests/components/Sidebar.test.tsx",
+        "status": "passed",
+        "assertions": [
+          {
+            "name": "Sidebar component renders Admin links on desktop and mobile when isAdmin is true",
+            "status": "passed"
+          },
+          {
+            "name": "Sidebar component does not render Admin links when isAdmin is false even with legacy UID",
+            "status": "passed"
+          },
+          {
+            "name": "Sidebar component does not render Admin links for unauthenticated/guest users",
+            "status": "passed"
+          },
+          {
+            "name": "Sidebar component does not render inert search input or search modal",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "path": "tests/components/StellarCheckoutButton.test.jsx",
+        "status": "passed",
+        "assertions": [
+          {
+            "name": "StellarCheckoutButton is disabled while the disabled prop is set",
+            "status": "passed"
+          },
+          {
+            "name": "StellarCheckoutButton is disabled while a payment is in flight and shows the status message",
+            "status": "passed"
+          },
+          {
+            "name": "StellarCheckoutButton connects a missing wallet before paying with the connected address",
+            "status": "passed"
+          },
+          {
+            "name": "StellarCheckoutButton surfaces a WalletError from connectWallet in the alert span and does not pay",
+            "status": "passed"
+          },
+          {
+            "name": "StellarCheckoutButton surfaces a WalletError from payWithStellar in the alert span",
+            "status": "passed"
+          },
+          {
+            "name": "StellarCheckoutButton renders the payment-confirmed state with the tx link and calls onSuccess",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "path": "tests/components/StellarOrderWatch.test.jsx",
+        "status": "passed",
+        "assertions": [
+          {
+            "name": "StellarOrderWatch Component renders starting state on mount when orderId is provided",
+            "status": "passed"
+          },
+          {
+            "name": "StellarOrderWatch Component does not start indexer when disabled or orderId is empty",
+            "status": "passed"
+          },
+          {
+            "name": "StellarOrderWatch Component updates UI on indexer status change and error callback",
+            "status": "passed"
+          },
+          {
+            "name": "StellarOrderWatch Component ignores non-pay events and events for other order IDs",
+            "status": "passed"
+          },
+          {
+            "name": "StellarOrderWatch Component matches correct order event, calls onEvent, stops indexer, and renders matched details",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "path": "tests/components/StellarOrderWatch.test.tsx",
+        "status": "passed",
+        "assertions": [
+          {
+            "name": "StellarOrderWatch clears the error banner when onStatus receives lastError=undefined while running",
+            "status": "passed"
+          },
+          {
+            "name": "StellarOrderWatch clears error banner when a matching payment event is received",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "path": "tests/components/Toast.test.jsx",
+        "status": "passed",
+        "assertions": [
+          {
+            "name": "Toast display and exit lifecycle waits for the default display duration and the complete exit window",
+            "status": "passed"
+          },
+          {
+            "name": "Toast display and exit lifecycle honors a custom display duration rather than closing after 300ms",
+            "status": "passed"
+          },
+          {
+            "name": "Toast display and exit lifecycle still allows the exit animation when display time is zero",
+            "status": "passed"
+          },
+          {
+            "name": "Toast display and exit lifecycle does not close a fresh toast shown within the previous exit window",
+            "status": "passed"
+          },
+          {
+            "name": "Toast display and exit lifecycle closes an immediately replaced toast after its own full duration",
+            "status": "passed"
+          },
+          {
+            "name": "Toast display and exit lifecycle restarts for a new message even with the same callback and show flag",
+            "status": "passed"
+          },
+          {
+            "name": "Toast display and exit lifecycle does not call onClose after unmounting mid-exit",
+            "status": "passed"
+          },
+          {
+            "name": "Toast display and exit lifecycle cancels the display timer when unmounted before the exit phase",
+            "status": "passed"
+          },
+          {
+            "name": "Toast display and exit lifecycle cancels a pending close when show becomes false during exit",
+            "status": "passed"
+          },
+          {
+            "name": "Toast display and exit lifecycle does not schedule a hidden toast but starts when it is shown",
+            "status": "passed"
+          },
+          {
+            "name": "Toast display and exit lifecycle restarts the display timer when the duration changes",
+            "status": "passed"
+          },
+          {
+            "name": "Toast display and exit lifecycle cancels the old callback when only the callback changes during exit",
+            "status": "passed"
+          },
+          {
+            "name": "Toast display and exit lifecycle does not postpone the deadline on an unchanged rerender",
+            "status": "passed"
+          },
+          {
+            "name": "Toast display and exit lifecycle keeps one timer lifecycle under StrictMode setup and cleanup",
+            "status": "passed"
+          },
+          {
+            "name": "Toast display and exit lifecycle preserves the manual close callback",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "path": "tests/components/checkout.test.tsx",
+        "status": "passed",
+        "assertions": [
+          {
+            "name": "Checkout page submission states disables the stage-1 submit button while sendMail request is in flight",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout page submission states enables stage-2 confirmation after the OTP email is sent",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout page submission states re-enables submission after a failed email and allows one pending retry",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout page submission states allows another submission after going back from confirmation",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout page submission states keeps the empty-cart screen for 'missing cart'",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout page submission states keeps the empty-cart screen for 'empty items with a stale positive tot\u2026'",
+            "status": "passed"
+          },
+          {
+            "name": "Checkout page submission states keeps the empty-cart screen for 'items with a zero total'",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "path": "tests/components/contactus.test.tsx",
+        "status": "passed",
+        "assertions": [
+          {
+            "name": "ContactUs component renders the contact form properly",
+            "status": "passed"
+          },
+          {
+            "name": "ContactUs component shows persistent error message when sendMail fails",
+            "status": "passed"
+          },
+          {
+            "name": "ContactUs component clears the error message when a subsequent submission succeeds",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "path": "tests/components/loading.test.tsx",
+        "status": "passed",
+        "assertions": [
+          {
+            "name": "Loading components renders LoadingSpinner with expected loader classes",
+            "status": "passed"
+          },
+          {
+            "name": "Loading components renders LoadingSpinner in root app/loading",
+            "status": "passed"
+          },
+          {
+            "name": "Loading components renders LoadingSpinner in app/shop/loading",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "path": "tests/components/newsletter.test.tsx",
+        "status": "passed",
+        "assertions": [
+          {
+            "name": "Newsletter component shows error toast when email is empty",
+            "status": "passed"
+          },
+          {
+            "name": "Newsletter component shows error toast when invalid email is entered",
+            "status": "passed"
+          },
+          {
+            "name": "Newsletter component shows success toast and resets email state on valid submission",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "path": "tests/components/shop-cart-identity.test.jsx",
+        "status": "passed",
+        "assertions": [
+          {
+            "name": "shop cart row identity preserves the surviving DOM row when removing duplicate 0",
+            "status": "passed"
+          },
+          {
+            "name": "shop cart row identity preserves the surviving DOM row when removing duplicate 1",
+            "status": "passed"
+          },
+          {
+            "name": "product detail cart row identity preserves the surviving DOM row when removing duplicate 0",
+            "status": "passed"
+          },
+          {
+            "name": "product detail cart row identity preserves the surviving DOM row when removing duplicate 1",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "path": "tests/hooks/useToast.test.jsx",
+        "status": "passed",
+        "assertions": [
+          {
+            "name": "useToast hook (Issue #31) initializes with toast hidden and empty message",
+            "status": "passed"
+          },
+          {
+            "name": "useToast hook (Issue #31) shows toast with provided message and auto-hides after specified delay",
+            "status": "passed"
+          },
+          {
+            "name": "useToast hook (Issue #31) hideToast immediately dismisses toast and cancels pending auto-hide timer",
+            "status": "passed"
+          },
+          {
+            "name": "useToast hook (Issue #31) consecutive showToast calls reset the auto-hide timer with the latest message",
+            "status": "passed"
+          },
+          {
+            "name": "useToast hook (Issue #31) cleans up pending timer on unmount to prevent state updates on unmounted component",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "path": "tests/lib/AuthContext.test.tsx",
+        "status": "passed",
+        "assertions": [
+          {
+            "name": "AuthContext getSession rejection handling handles rejected getSession gracefully, setting loading to false and user to null",
+            "status": "passed"
+          },
+          {
+            "name": "AuthContext getSession rejection handling handles successful getSession properly",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "path": "tests/lib/accessibility.test.ts",
+        "status": "passed",
+        "assertions": [
+          {
+            "name": "Accessibility - Color Contrast & Luminance (#39) calculates relative luminance correctly",
+            "status": "passed"
+          },
+          {
+            "name": "Accessibility - Color Contrast & Luminance (#39) calculates contrast ratio correctly",
+            "status": "passed"
+          },
+          {
+            "name": "Accessibility - Color Contrast & Luminance (#39) meetsContrastRequirement returns true for black on white",
+            "status": "passed"
+          },
+          {
+            "name": "Accessibility - Color Contrast & Luminance (#39) meetsContrastRequirement returns false for identical colors",
+            "status": "passed"
+          },
+          {
+            "name": "Accessibility - Color Contrast & Luminance (#39) meetsContrastRequirement handles ~3.8:1 pair like #828282 on #ffffff correctly with largeText flag",
+            "status": "passed"
+          },
+          {
+            "name": "Accessibility - Color Contrast & Luminance (#39) does not call console.warn when meetsContrastRequirement is executed",
+            "status": "passed"
+          },
+          {
+            "name": "Accessibility - DOM and ARIA Helpers isFocusable identifies focusable vs disabled/tabindex=-1 elements",
+            "status": "passed"
+          },
+          {
+            "name": "Accessibility - DOM and ARIA Helpers generateAriaId produces unique prefix IDs",
+            "status": "passed"
+          },
+          {
+            "name": "Accessibility - DOM and ARIA Helpers aria props generators work as expected",
+            "status": "passed"
+          },
+          {
+            "name": "Accessibility - DOM and ARIA Helpers reduced motion helpers work with window.matchMedia",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "path": "tests/lib/auth-context.test.tsx",
+        "status": "passed",
+        "assertions": [
+          {
+            "name": "AuthProvider lifecycle & session tests (Issue #95) starts with loading true and flips to false when getSession resolves",
+            "status": "passed"
+          },
+          {
+            "name": "AuthProvider lifecycle & session tests (Issue #95) recognizes admin users based on NEXT_PUBLIC_ADMIN_EMAILS whitelist",
+            "status": "passed"
+          },
+          {
+            "name": "AuthProvider lifecycle & session tests (Issue #95) handles null session on getSession resolution",
+            "status": "passed"
+          },
+          {
+            "name": "AuthProvider lifecycle & session tests (Issue #95) updates user state on onAuthStateChange events and clears on SIGNED_OUT",
+            "status": "passed"
+          },
+          {
+            "name": "AuthProvider lifecycle & session tests (Issue #95) unsubscribes from onAuthStateChange on unmount",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "path": "tests/lib/auth.test.js",
+        "status": "passed",
+        "assertions": [
+          {
+            "name": "mapAuthUser returns null for a null/undefined Supabase user",
+            "status": "passed"
+          },
+          {
+            "name": "mapAuthUser prefers full_name from user_metadata",
+            "status": "passed"
+          },
+          {
+            "name": "mapAuthUser falls back to name, then display_name",
+            "status": "passed"
+          },
+          {
+            "name": "mapAuthUser falls back to the email prefix, then the 'User' default",
+            "status": "passed"
+          },
+          {
+            "name": "mapAuthUser prefers avatar_url over picture for the photo",
+            "status": "passed"
+          },
+          {
+            "name": "login returns the mapped user on success",
+            "status": "passed"
+          },
+          {
+            "name": "login throws Error(message) on a mocked Supabase error",
+            "status": "passed"
+          },
+          {
+            "name": "signup returns the mapped user on success",
+            "status": "passed"
+          },
+          {
+            "name": "signup throws Error(message) on a mocked Supabase error",
+            "status": "passed"
+          },
+          {
+            "name": "loginWithGoogle returns the OAuth data on success",
+            "status": "passed"
+          },
+          {
+            "name": "loginWithGoogle throws Error(message) on a mocked Supabase error",
+            "status": "passed"
+          },
+          {
+            "name": "logout resolves when signOut succeeds",
+            "status": "passed"
+          },
+          {
+            "name": "logout throws Error(message) on a mocked Supabase error",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "path": "tests/lib/buyer-orders.test.ts",
+        "status": "passed",
+        "assertions": [
+          {
+            "name": "Buyer Orders Management saves an order and caches it in localStorage",
+            "status": "passed"
+          },
+          {
+            "name": "Buyer Orders Management updates an existing order when same orderId is saved again",
+            "status": "passed"
+          },
+          {
+            "name": "Buyer Orders Management fetches orders from Supabase when available",
+            "status": "passed"
+          },
+          {
+            "name": "Buyer Orders Management falls back to local cache when Supabase returns empty",
+            "status": "passed"
+          },
+          {
+            "name": "Buyer Orders Management verifies order on-chain via readOrder",
+            "status": "passed"
+          },
+          {
+            "name": "Buyer Orders Management returns verified false when on-chain order is not found or Unknown",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "path": "tests/lib/checkout-simulate.test.ts",
+        "status": "passed",
+        "assertions": [
+          {
+            "name": "Pay Invocation Argument Construction & Simulate Tests produces deterministic 64-char lowercase hex order id hashes",
+            "status": "passed"
+          },
+          {
+            "name": "Pay Invocation Argument Construction & Simulate Tests converts USD amounts to raw units accurately",
+            "status": "passed"
+          },
+          {
+            "name": "Pay Invocation Argument Construction & Simulate Tests builds pay invocation transaction with exact function name and 4 arguments",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "path": "tests/lib/env.test.ts",
+        "status": "passed",
+        "assertions": [
+          {
+            "name": "isAdminEmail returns true for admin emails",
+            "status": "passed"
+          },
+          {
+            "name": "isAdminEmail is case insensitive",
+            "status": "passed"
+          },
+          {
+            "name": "isAdminEmail returns false for non-admin emails",
+            "status": "passed"
+          },
+          {
+            "name": "isAdminEmail returns false for null/undefined",
+            "status": "passed"
+          },
+          {
+            "name": "isAdminEmail handles empty admin list",
+            "status": "passed"
+          },
+          {
+            "name": "isDevelopment returns true in development",
+            "status": "passed"
+          },
+          {
+            "name": "isDevelopment returns false in production",
+            "status": "passed"
+          },
+          {
+            "name": "isProduction returns true in production",
+            "status": "passed"
+          },
+          {
+            "name": "isProduction returns false in development",
+            "status": "passed"
+          },
+          {
+            "name": "validateEnv throws an error naming missing fields when required variables are unset",
+            "status": "passed"
+          },
+          {
+            "name": "validateEnv returns populated configuration when all required environment variables are set",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "path": "tests/lib/errors.test.ts",
+        "status": "passed",
+        "assertions": [
+          {
+            "name": "Error Classification & Handling Tests (lib/errors.ts) null and undefined handling returns GENERAL_ERRORS.Unknown for null and undefined",
+            "status": "passed"
+          },
+          {
+            "name": "Error Classification & Handling Tests (lib/errors.ts) OrderAlreadyPaid classification resolves Error('OrderAlreadyPaid') and string 'order already paid' to STELLAR_ORDER_ALREADY_PAID",
+            "status": "passed"
+          },
+          {
+            "name": "Error Classification & Handling Tests (lib/errors.ts) balance checks and message length fallback maps 'Insufficient USDC balance' to ACCOUNT_INSUFFICIENT_BALANCE",
+            "status": "passed"
+          },
+          {
+            "name": "Error Classification & Handling Tests (lib/errors.ts) balance checks and message length fallback falls back to generic userMessage for unknown errors over 100 characters",
+            "status": "passed"
+          },
+          {
+            "name": "Error Classification & Handling Tests (lib/errors.ts) balance checks and message length fallback preserves original message for unknown errors under or equal to 100 characters",
+            "status": "passed"
+          },
+          {
+            "name": "Error Classification & Handling Tests (lib/errors.ts) getUserMessage and isRecoverable helpers returns userMessage matching parseError result",
+            "status": "passed"
+          },
+          {
+            "name": "Error Classification & Handling Tests (lib/errors.ts) getUserMessage and isRecoverable helpers reflects the recoverable flag from AppError",
+            "status": "passed"
+          },
+          {
+            "name": "Error Classification & Handling Tests (lib/errors.ts) WalletError classification by .code property classifies WalletError instances by their .code property",
+            "status": "passed"
+          },
+          {
+            "name": "Error Classification & Handling Tests (lib/errors.ts) Table schema integrity ensures every STELLAR_ERRORS entry maps to defined code and userMessage",
+            "status": "passed"
+          },
+          {
+            "name": "Error Classification & Handling Tests (lib/errors.ts) Table schema integrity creates custom AppError objects accurately with createError",
+            "status": "passed"
+          },
+          {
+            "name": "Error Classification & Handling Tests (lib/errors.ts) AUTH_ERRORS vs broad Stellar keyword heuristics precedence matches exact auth message when it contains broad keyword like 'cancelled'",
+            "status": "passed"
+          },
+          {
+            "name": "Error Classification & Handling Tests (lib/errors.ts) AUTH_ERRORS vs broad Stellar keyword heuristics precedence matches pure Stellar message 'Transaction cancelled by user' to USER_REJECTED",
+            "status": "passed"
+          },
+          {
+            "name": "Error Classification & Handling Tests (lib/errors.ts) AUTH_ERRORS vs broad Stellar keyword heuristics precedence prioritizes auth errors over other common keywords like 'insufficient' or 'timeout'",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "path": "tests/lib/hash-order-id.test.ts",
+        "status": "passed",
+        "assertions": [
+          {
+            "name": "hashOrderId produces a 32-byte digest",
+            "status": "passed"
+          },
+          {
+            "name": "hashOrderId is deterministic \u2014 same input yields same output",
+            "status": "passed"
+          },
+          {
+            "name": "hashOrderId produces different hashes for different inputs (>32 chars)",
+            "status": "passed"
+          },
+          {
+            "name": "hashOrderId is not a naive byte-copy stub \u2014 hash of 40 'a's differs from first-32-bytes-only",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "path": "tests/lib/products.test.ts",
+        "status": "passed",
+        "assertions": [
+          {
+            "name": "lib/products data layer mapProduct returns null when passed null or undefined",
+            "status": "passed"
+          },
+          {
+            "name": "lib/products data layer mapProduct coerces price strings to Number and preserves product fields",
+            "status": "passed"
+          },
+          {
+            "name": "lib/products data layer mapProduct handles already numeric prices correctly",
+            "status": "passed"
+          },
+          {
+            "name": "lib/products data layer listProducts fetches products ordered by created_at desc and maps each product",
+            "status": "passed"
+          },
+          {
+            "name": "lib/products data layer listProducts throws error when Supabase select fails",
+            "status": "passed"
+          },
+          {
+            "name": "lib/products data layer getProductById fetches a single product by ID and maps it",
+            "status": "passed"
+          },
+          {
+            "name": "lib/products data layer getProductById returns null when product is not found",
+            "status": "passed"
+          },
+          {
+            "name": "lib/products data layer getProductById throws error when Supabase lookup fails",
+            "status": "passed"
+          },
+          {
+            "name": "lib/products data layer uploadProductImage uploads file with timestamped name and returns public URL",
+            "status": "passed"
+          },
+          {
+            "name": "lib/products data layer uploadProductImage throws error when storage upload fails",
+            "status": "passed"
+          },
+          {
+            "name": "lib/products data layer createProduct inserts a new product and returns the mapped created product",
+            "status": "passed"
+          },
+          {
+            "name": "lib/products data layer createProduct throws error when insert fails",
+            "status": "passed"
+          },
+          {
+            "name": "lib/products data layer updateProduct updates product fields by id and returns mapped product",
+            "status": "passed"
+          },
+          {
+            "name": "lib/products data layer updateProduct throws error when update fails",
+            "status": "passed"
+          },
+          {
+            "name": "lib/products data layer deleteProduct deletes a product by id",
+            "status": "passed"
+          },
+          {
+            "name": "lib/products data layer deleteProduct throws error when delete fails",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "path": "tests/lib/scval.test.ts",
+        "status": "passed",
+        "assertions": [
+          {
+            "name": "hashOrderId produces a 32-byte Uint8Array digest",
+            "status": "passed"
+          },
+          {
+            "name": "hashOrderId is deterministic for identical inputs",
+            "status": "passed"
+          },
+          {
+            "name": "hashOrderId produces different hashes for inputs sharing the first 32 characters (input sensitivity for >32 chars)",
+            "status": "passed"
+          },
+          {
+            "name": "hashOrderId matches standard SHA-256 test vectors",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "path": "tests/lib/sendmail.test.ts",
+        "status": "passed",
+        "assertions": [
+          {
+            "name": "lib/sendmail.js validateEmailConfig / missing env vars throws naming all missing NEXT_PUBLIC_EMAILJS_* variables when none are set",
+            "status": "passed"
+          },
+          {
+            "name": "lib/sendmail.js validateEmailConfig / missing env vars throws naming specific missing variables when only some are unset",
+            "status": "passed"
+          },
+          {
+            "name": "lib/sendmail.js sendMail execution resolves the emailjs response and passes correct service, template, params, and key",
+            "status": "passed"
+          },
+          {
+            "name": "lib/sendmail.js sendMail execution falls back recipient_email to NEXT_PUBLIC_DEFAULT_RECIPIENT_EMAIL when recipientEmail is omitted",
+            "status": "passed"
+          },
+          {
+            "name": "lib/sendmail.js sendMail execution handles default empty strings for omitted optional arguments",
+            "status": "passed"
+          },
+          {
+            "name": "lib/sendmail.js sendMail execution rejects and rethrows when emailjs.send fails",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "path": "tests/lib/session-cleanup.test.ts",
+        "status": "passed",
+        "assertions": [
+          {
+            "name": "Auth and Session persistence preserves supabase auth tokens when cart items are cleared",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "path": "tests/lib/supabase.test.ts",
+        "status": "passed",
+        "assertions": [
+          {
+            "name": "lib/supabase calls createClient with configured environment variables and auth options",
+            "status": "passed"
+          },
+          {
+            "name": "lib/supabase warns and uses placeholders when environment variables are missing",
+            "status": "passed"
+          },
+          {
+            "name": "lib/supabase warns when only NEXT_PUBLIC_SUPABASE_URL is provided",
+            "status": "passed"
+          },
+          {
+            "name": "lib/supabase warns when only NEXT_PUBLIC_SUPABASE_ANON_KEY is provided",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "path": "tests/lib/stellar/account.test.ts",
+        "status": "passed",
+        "assertions": [
+          {
+            "name": "formatAmount formats MIN_NATIVE_RESERVE with 7 decimals correctly",
+            "status": "passed"
+          },
+          {
+            "name": "formatAmount formats decimal amounts with fractional parts correctly",
+            "status": "passed"
+          },
+          {
+            "name": "formatAmount trims trailing zeros cleanly",
+            "status": "passed"
+          },
+          {
+            "name": "formatAmount handles negative values with a leading minus sign",
+            "status": "passed"
+          },
+          {
+            "name": "formatAmount handles zero correctly",
+            "status": "passed"
+          },
+          {
+            "name": "formatAmount handles decimals = 0 without error",
+            "status": "passed"
+          },
+          {
+            "name": "formatAmount handles integers exceeding Number.MAX_SAFE_INTEGER without precision loss",
+            "status": "passed"
+          },
+          {
+            "name": "isAccountMissingError identifies 404 status and account not found messages",
+            "status": "passed"
+          },
+          {
+            "name": "isAccountMissingError identifies network and RPC outages as NOT account-missing",
+            "status": "passed"
+          },
+          {
+            "name": "loadAccount never calls friendbot and rejects when getAccount fails with a network error",
+            "status": "passed"
+          },
+          {
+            "name": "loadAccount triggers friendbot funding and re-loads account when getAccount fails with account-missing error",
+            "status": "passed"
+          },
+          {
+            "name": "getNativeBalance returns balance when getAccountEntry succeeds",
+            "status": "passed"
+          },
+          {
+            "name": "getNativeBalance surfaces RPC / network rejections rather than returning 0n",
+            "status": "passed"
+          },
+          {
+            "name": "getNativeBalance returns 0n when getAccountEntry indicates account does not exist (not found)",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "path": "tests/lib/stellar/checkout.test.ts",
+        "status": "passed",
+        "assertions": [
+          {
+            "name": "usdToRawUnits converts a typical USD price to 7-decimal raw units",
+            "status": "passed"
+          },
+          {
+            "name": "usdToRawUnits is floating-point safe for prices like 0.29",
+            "status": "passed"
+          },
+          {
+            "name": "usdToRawUnits handles the smallest unit and whole dollars",
+            "status": "passed"
+          },
+          {
+            "name": "usdToRawUnits throws WalletError with code INVALID_AMOUNT for zero",
+            "status": "passed"
+          },
+          {
+            "name": "usdToRawUnits throws WalletError with code INVALID_AMOUNT for negative",
+            "status": "passed"
+          },
+          {
+            "name": "usdToRawUnits throws WalletError with code INVALID_AMOUNT for NaN",
+            "status": "passed"
+          },
+          {
+            "name": "usdToRawUnits throws WalletError with code INVALID_AMOUNT for Infinity",
+            "status": "passed"
+          },
+          {
+            "name": "orderIdHash returns a deterministic 64-character hex string",
+            "status": "passed"
+          },
+          {
+            "name": "payWithStellar throws CONTRACT_NOT_CONFIGURED if CHECKOUT_CONTRACT_ID is empty",
+            "status": "passed"
+          },
+          {
+            "name": "payWithStellar executes full successful checkout payment flow",
+            "status": "passed"
+          },
+          {
+            "name": "payWithStellar throws TX_SIMULATION_ERROR when simulation report fails",
+            "status": "passed"
+          },
+          {
+            "name": "payWithStellar throws TX_SEND_ERROR when server rejects transaction submission",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "path": "tests/lib/stellar/events.test.ts",
+        "status": "passed",
+        "assertions": [
+          {
+            "name": "decodePaymentEvent decodes a full pay event (topics + amount map + contract id)",
+            "status": "passed"
+          },
+          {
+            "name": "decodePaymentEvent skips events whose first topic is not the 'pay' symbol",
+            "status": "passed"
+          },
+          {
+            "name": "decodePaymentEvent skips events whose first topic is a string instead of a symbol",
+            "status": "passed"
+          },
+          {
+            "name": "decodePaymentEvent tolerates fewer than five topics (only fills the slots present)",
+            "status": "passed"
+          },
+          {
+            "name": "decodePaymentEvent returns null when no pay event exists in the transaction",
+            "status": "passed"
+          },
+          {
+            "name": "decodePaymentEvent decodes a non-map data ScVal with the generic scValToString path",
+            "status": "passed"
+          },
+          {
+            "name": "decodePaymentEvent decodes from a base64 XDR round-trip of the event (what getTransaction returns)",
+            "status": "passed"
+          },
+          {
+            "name": "waitForTransaction resolves immediately when status is SUCCESS",
+            "status": "passed"
+          },
+          {
+            "name": "waitForTransaction throws error when transaction status is FAILED",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "path": "tests/lib/stellar/freighter.test.ts",
+        "status": "passed",
+        "assertions": [
+          {
+            "name": "shortAddress returns an empty string for null or empty input",
+            "status": "passed"
+          },
+          {
+            "name": "shortAddress returns addresses at or below the threshold unchanged",
+            "status": "passed"
+          },
+          {
+            "name": "shortAddress truncates a 56-char Stellar address to the first and last 6 chars",
+            "status": "passed"
+          },
+          {
+            "name": "shortAddress honours a custom chars argument",
+            "status": "passed"
+          },
+          {
+            "name": "WalletError is an Error named WalletError with the default code",
+            "status": "passed"
+          },
+          {
+            "name": "WalletError preserves custom codes used by the UI",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "path": "tests/lib/stellar/indexer.test.ts",
+        "status": "passed",
+        "assertions": [
+          {
+            "name": "PaymentEventIndexer startup retry (Issue #68) retries getLatestLedger when initial call fails and recovers without 'no cursor' error",
+            "status": "passed"
+          },
+          {
+            "name": "PaymentEventIndexer startup retry (Issue #68) handles continuous poll updates when initialized normally",
+            "status": "passed"
+          },
+          {
+            "name": "PaymentEventIndexer startup retry (Issue #68) stops cleanly and ceases polling after stop() is called",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "path": "tests/lib/stellar/scval.test.ts",
+        "status": "passed",
+        "assertions": [
+          {
+            "name": "ScVal helpers i128ToScVal matches nativeToScVal XDR base64 for key boundary values",
+            "status": "passed"
+          },
+          {
+            "name": "ScVal helpers i128ToScVal accepts number and string inputs",
+            "status": "passed"
+          },
+          {
+            "name": "ScVal helpers bytes32ToScVal accepts exactly 32-byte Uint8Array",
+            "status": "passed"
+          },
+          {
+            "name": "ScVal helpers bytes32ToScVal accepts 64-character hex string",
+            "status": "passed"
+          },
+          {
+            "name": "ScVal helpers bytes32ToScVal throws on inputs not equal to 32 bytes",
+            "status": "passed"
+          },
+          {
+            "name": "ScVal helpers bytes32ToScVal throws when passed a 64-character non-hex string instead of producing zero bytes",
+            "status": "passed"
+          },
+          {
+            "name": "ScVal helpers hexToBytes and bytesToHex round-trips hex and bytes with normalized lowercase output",
+            "status": "passed"
+          },
+          {
+            "name": "ScVal helpers hexToBytes and bytesToHex returns an empty Uint8Array for empty string",
+            "status": "passed"
+          },
+          {
+            "name": "ScVal helpers hexToBytes and bytesToHex throws on odd-length hex strings",
+            "status": "passed"
+          },
+          {
+            "name": "ScVal helpers hexToBytes and bytesToHex throws on invalid hex characters instead of returning zero bytes",
+            "status": "passed"
+          },
+          {
+            "name": "ScVal helpers scValToString and scValToNativeSafe decodes symbols, strings, and booleans",
+            "status": "passed"
+          },
+          {
+            "name": "ScVal helpers scValToString and scValToNativeSafe decodes negative i128 correctly",
+            "status": "passed"
+          },
+          {
+            "name": "ScVal helpers scValToString and scValToNativeSafe decodes bytes to hex string",
+            "status": "passed"
+          },
+          {
+            "name": "ScVal helpers hashOrderId deterministically returns a 32-byte Uint8Array",
+            "status": "passed"
+          }
+        ]
+      },
+      {
+        "path": "tests/lib/stellar/simulate.test.ts",
+        "status": "passed",
+        "assertions": [
+          {
+            "name": "Simulate Fee Math & Transaction Builder Tests (lib/stellar/simulate.ts) recommendedInclusionFee returns BigInt(max) for an all-digits max string",
+            "status": "passed"
+          },
+          {
+            "name": "Simulate Fee Math & Transaction Builder Tests (lib/stellar/simulate.ts) recommendedInclusionFee falls back to BigInt(BASE_FEE) when max is non-numeric or malformed",
+            "status": "passed"
+          },
+          {
+            "name": "Simulate Fee Math & Transaction Builder Tests (lib/stellar/simulate.ts) recommendedInclusionFee falls back to BigInt(BASE_FEE) when sorobanInclusionFee is missing",
+            "status": "passed"
+          },
+          {
+            "name": "Simulate Fee Math & Transaction Builder Tests (lib/stellar/simulate.ts) recommendedInclusionFee falls back to BigInt(BASE_FEE) when getFeeStats throws an error",
+            "status": "passed"
+          },
+          {
+            "name": "Simulate Fee Math & Transaction Builder Tests (lib/stellar/simulate.ts) budgetFee returns ((higher of inclusion/minResource) + FEE_BUFFER_STROOPS).toString() when inclusion > minResource",
+            "status": "passed"
+          },
+          {
+            "name": "Simulate Fee Math & Transaction Builder Tests (lib/stellar/simulate.ts) budgetFee returns ((higher of inclusion/minResource) + FEE_BUFFER_STROOPS).toString() when minResource > inclusion",
+            "status": "passed"
+          },
+          {
+            "name": "Simulate Fee Math & Transaction Builder Tests (lib/stellar/simulate.ts) budgetFee handles report.ok = false by falling back minResourceFee to 0n",
+            "status": "passed"
+          },
+          {
+            "name": "Simulate Fee Math & Transaction Builder Tests (lib/stellar/simulate.ts) buildInvocationTransaction uses BASE_FEE and configured NETWORK_PASSPHRASE by default",
+            "status": "passed"
+          },
+          {
+            "name": "Simulate Fee Math & Transaction Builder Tests (lib/stellar/simulate.ts) buildInvocationTransaction honours an explicit fee passed by caller",
+            "status": "passed"
+          }
+        ]
+      }
+    ]
+  },
+  "coverage": {
+    "statements": 45.73,
+    "branches": 43.3,
+    "functions": 40.17,
+    "lines": 45.94,
+    "all_source_files": 74,
+    "thresholds_unchanged": {
+      "statements": 4,
+      "branches": 40,
+      "functions": 10,
+      "lines": 4
+    }
+  },
+  "commands": [
+    {
+      "command": "npm ci --ignore-scripts --no-audit --no-fund",
+      "exit": 0
+    },
+    {
+      "command": "npm audit --audit-level=high --json",
+      "exit": 0
+    },
+    {
+      "command": "npm run test:coverage -- --maxWorkers=1 --reporter=json",
+      "exit": 0
+    },
+    {
+      "command": "npm run type-check (no existing .next directory)",
+      "exit": 0
+    },
+    {
+      "command": "npm run lint",
+      "exit": 0,
+      "warnings": "Two existing admin img warnings and StellarWalletButton effect dependency"
+    },
+    {
+      "command": "npm run build",
+      "exit": 0,
+      "environment": "Same dummy public variables as .github/workflows/ci.yml"
+    },
+    {
+      "command": "Native Prettier on edited source/config/test paths and git diff --check",
+      "exit": 0
+    }
+  ],
+  "browser": {
+    "kind": "production-browser-smoke",
+    "data": "One synthetic product; only Supabase product reads intercepted",
+    "checks": [
+      "Home renders with correct title and navigation",
+      "Anonymous Shop navigation preserves existing login redirect",
+      "/shop: duplicate removal preserves survivor DOM and stored count/price",
+      "/shop/browser-shoe: duplicate removal preserves survivor DOM and stored count/price",
+      "Async product route renders and cart survives reload",
+      "Real Next/Sharp optimizer returns 200 image content for local shoe asset",
+      "/checkout: meaningful content without error overlay",
+      "/profile/login: meaningful content without error overlay"
+    ],
+    "pageErrors": [],
+    "resourceErrors": [
+      {
+        "status": 404,
+        "url": "http://127.0.0.1:3189/about?_rsc=qXN8NJmu_w0Hw17h"
+      },
+      {
+        "status": 404,
+        "url": "http://127.0.0.1:3189/contact?_rsc=qXN8NJmu_w0Hw17h"
+      },
+      {
+        "status": 404,
+        "url": "http://127.0.0.1:3189/categories?_rsc=qXN8NJmu_w0Hw17h"
+      },
+      {
+        "status": 404,
+        "url": "http://127.0.0.1:3189/about?_rsc=zY6Ib4z2L9k5qBVy"
+      },
+      {
+        "status": 404,
+        "url": "http://127.0.0.1:3189/contact?_rsc=zY6Ib4z2L9k5qBVy"
+      },
+      {
+        "status": 404,
+        "url": "http://127.0.0.1:3189/categories?_rsc=zY6Ib4z2L9k5qBVy"
+      },
+      {
+        "status": 404,
+        "url": "http://127.0.0.1:3189/about?_rsc=zY6Ib4z2L9k5qBVy"
+      },
+      {
+        "status": 404,
+        "url": "http://127.0.0.1:3189/contact?_rsc=zY6Ib4z2L9k5qBVy"
+      },
+      {
+        "status": 404,
+        "url": "http://127.0.0.1:3189/categories?_rsc=zY6Ib4z2L9k5qBVy"
+      }
+    ],
+    "success": true
+  },
+  "execution_limits": [
+    "Node24.19.0 in isolated Linux; Node20 verification belongs to automatic CI",
+    "agent-browser daemon could not start; browser execution used installed Playwright with Chromium149 in the same process scope as the production server",
+    "Initial browser network-idle wait timed out on existing remote Unsplash image requests; final check waited for actual UI elements",
+    "Existing sidebar /about, /contact and /categories prefetches return 404; F upstream363/fork13 own the route repair",
+    "No hosted Supabase, email submission, wallet, chain transaction, production deployment or award claim"
+  ]
+}

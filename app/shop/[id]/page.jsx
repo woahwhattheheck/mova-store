@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, use } from "react";
 import Image from "next/image";
 import { FaShoppingCart } from "react-icons/fa";
 import { useCart } from "../../../context/CartContext";
@@ -10,7 +10,8 @@ import useToast from "../../../hooks/useToast";
 import { getProductById } from "../../../lib/products";
 import LoadingSpinner from "../../../components/LoadingSpinner";
 
-const ProductPage = ({ params }) => {
+const ProductPage = (props) => {
+  const params = use(props.params);
   const { itemCount, cartItems, addToCart, removeFromCart, totalPrice } = useCart();
   const { toast, showToast, hideToast } = useToast(3000);
   const [product, setProduct] = useState(null);
@@ -90,7 +91,7 @@ const ProductPage = ({ params }) => {
         ) : (
           <div>
             {cartItems.map((item) => (
-              <div key={item.id} className="flex justify-between items-center mb-2">
+              <div key={item.cartItemId} className="flex justify-between items-center mb-2">
                 <div className="w-16 h-16 flex-shrink-0">
                   <Image
                     src={item.img}

@@ -1,0 +1,1350 @@
+{
+  "author": "SABLE-WORK / ChatGPT Work",
+  "base": "65d9dfb09cbf544edbd0d6ac2954219427f734c7",
+  "branch": "integration/sable-mova-baseline-20260907",
+  "environment": {
+    "node": "v24.19.0",
+    "vitest": "1.6.1",
+    "lockfile_sha256": "8002316eb9280d07f9a0b144bff866146475114a051410f8fb184d9fefef72f6"
+  },
+  "executed_checks": [
+    {
+      "name": "frontend",
+      "command": [
+        "npm",
+        "test",
+        "--",
+        "--maxWorkers=1",
+        "--minWorkers=1",
+        "--reporter=json",
+        "--outputFile=../mova-final-tests.json"
+      ],
+      "exit_code": 0
+    },
+    {
+      "name": "types",
+      "command": [
+        "npm",
+        "run",
+        "type-check"
+      ],
+      "exit_code": 0
+    },
+    {
+      "name": "lint",
+      "command": [
+        "npm",
+        "run",
+        "lint"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "frontend": {
+    "passed": 252,
+    "failed": 0,
+    "files": 40,
+    "raw_report_sha256": "f76ed9301e0bb0ea9bbb02a5f671b241cec02c2ad74de272a200861f3e99d973"
+  },
+  "files": [
+    {
+      "path": "tests/(landingpage)/landingpage.test.tsx",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "Landing Page Components FAQ Component asserts exactly one panel is open and aria-expanded toggles",
+          "status": "passed"
+        },
+        {
+          "name": "Landing Page Components Newsletter Component asserts an invalid email never shows the success toast",
+          "status": "passed"
+        },
+        {
+          "name": "Landing Page Components Newsletter Component shows success toast when email is provided and clears input",
+          "status": "passed"
+        },
+        {
+          "name": "Landing Page Components ContactUs Component asserts a mock sendMail rejection renders the error message",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "path": "tests/components/AuthPage.test.tsx",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "AuthPage - Google OAuth Loading & Disabled State disables Google button while loginWithGoogle is pending and calls it once on multiple clicks",
+          "status": "passed"
+        },
+        {
+          "name": "AuthPage - Google OAuth Loading & Disabled State re-enables Google button and surfaces error when loginWithGoogle rejects",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "path": "tests/components/ContactUs.test.tsx",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "ContactUs component renders the contact form properly",
+          "status": "passed"
+        },
+        {
+          "name": "ContactUs component shows persistent error message when sendMail fails",
+          "status": "passed"
+        },
+        {
+          "name": "ContactUs component clears the error message when a subsequent submission succeeds",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "path": "tests/components/Modal.test.jsx",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "Modal component renders nothing when show is false",
+          "status": "passed"
+        },
+        {
+          "name": "Modal component renders children and close button when show is true",
+          "status": "passed"
+        },
+        {
+          "name": "Modal component calls onClose exactly once when the close button is clicked",
+          "status": "passed"
+        },
+        {
+          "name": "Modal component removes subtree when re-rendered with show=false",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "path": "tests/components/Sidebar.test.tsx",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "Sidebar component renders Admin links on desktop and mobile when isAdmin is true",
+          "status": "passed"
+        },
+        {
+          "name": "Sidebar component does not render Admin links when isAdmin is false even with legacy UID",
+          "status": "passed"
+        },
+        {
+          "name": "Sidebar component does not render Admin links for unauthenticated/guest users",
+          "status": "passed"
+        },
+        {
+          "name": "Sidebar component does not render inert search input or search modal",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "path": "tests/components/StellarCheckoutButton.test.jsx",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "StellarCheckoutButton is disabled while the disabled prop is set",
+          "status": "passed"
+        },
+        {
+          "name": "StellarCheckoutButton is disabled while a payment is in flight and shows the status message",
+          "status": "passed"
+        },
+        {
+          "name": "StellarCheckoutButton connects a missing wallet before paying with the connected address",
+          "status": "passed"
+        },
+        {
+          "name": "StellarCheckoutButton surfaces a WalletError from connectWallet in the alert span and does not pay",
+          "status": "passed"
+        },
+        {
+          "name": "StellarCheckoutButton surfaces a WalletError from payWithStellar in the alert span",
+          "status": "passed"
+        },
+        {
+          "name": "StellarCheckoutButton renders the payment-confirmed state with the tx link and calls onSuccess",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "path": "tests/components/StellarOrderWatch.test.jsx",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "StellarOrderWatch Component renders starting state on mount when orderId is provided",
+          "status": "passed"
+        },
+        {
+          "name": "StellarOrderWatch Component does not start indexer when disabled or orderId is empty",
+          "status": "passed"
+        },
+        {
+          "name": "StellarOrderWatch Component updates UI on indexer status change and error callback",
+          "status": "passed"
+        },
+        {
+          "name": "StellarOrderWatch Component ignores non-pay events and events for other order IDs",
+          "status": "passed"
+        },
+        {
+          "name": "StellarOrderWatch Component matches correct order event, calls onEvent, stops indexer, and renders matched details",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "path": "tests/components/StellarOrderWatch.test.tsx",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "StellarOrderWatch clears the error banner when onStatus receives lastError=undefined while running",
+          "status": "passed"
+        },
+        {
+          "name": "StellarOrderWatch clears error banner when a matching payment event is received",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "path": "tests/components/Toast.test.jsx",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "Toast display and exit lifecycle waits for the default display duration and the complete exit window",
+          "status": "passed"
+        },
+        {
+          "name": "Toast display and exit lifecycle honors a custom display duration rather than closing after 300ms",
+          "status": "passed"
+        },
+        {
+          "name": "Toast display and exit lifecycle still allows the exit animation when display time is zero",
+          "status": "passed"
+        },
+        {
+          "name": "Toast display and exit lifecycle does not close a fresh toast shown within the previous exit window",
+          "status": "passed"
+        },
+        {
+          "name": "Toast display and exit lifecycle closes an immediately replaced toast after its own full duration",
+          "status": "passed"
+        },
+        {
+          "name": "Toast display and exit lifecycle restarts for a new message even with the same callback and show flag",
+          "status": "passed"
+        },
+        {
+          "name": "Toast display and exit lifecycle does not call onClose after unmounting mid-exit",
+          "status": "passed"
+        },
+        {
+          "name": "Toast display and exit lifecycle cancels the display timer when unmounted before the exit phase",
+          "status": "passed"
+        },
+        {
+          "name": "Toast display and exit lifecycle cancels a pending close when show becomes false during exit",
+          "status": "passed"
+        },
+        {
+          "name": "Toast display and exit lifecycle does not schedule a hidden toast but starts when it is shown",
+          "status": "passed"
+        },
+        {
+          "name": "Toast display and exit lifecycle restarts the display timer when the duration changes",
+          "status": "passed"
+        },
+        {
+          "name": "Toast display and exit lifecycle cancels the old callback when only the callback changes during exit",
+          "status": "passed"
+        },
+        {
+          "name": "Toast display and exit lifecycle does not postpone the deadline on an unchanged rerender",
+          "status": "passed"
+        },
+        {
+          "name": "Toast display and exit lifecycle keeps one timer lifecycle under StrictMode setup and cleanup",
+          "status": "passed"
+        },
+        {
+          "name": "Toast display and exit lifecycle preserves the manual close callback",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "path": "tests/components/checkout.test.tsx",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "Checkout page submission states disables the stage-1 submit button while sendMail request is in flight",
+          "status": "passed"
+        },
+        {
+          "name": "Checkout page submission states enables stage-2 confirmation after the OTP email is sent",
+          "status": "passed"
+        },
+        {
+          "name": "Checkout page submission states re-enables submission after a failed email and allows one pending retry",
+          "status": "passed"
+        },
+        {
+          "name": "Checkout page submission states allows another submission after going back from confirmation",
+          "status": "passed"
+        },
+        {
+          "name": "Checkout page submission states keeps the empty-cart screen for 'missing cart'",
+          "status": "passed"
+        },
+        {
+          "name": "Checkout page submission states keeps the empty-cart screen for 'empty items with a stale positive tot\u2026'",
+          "status": "passed"
+        },
+        {
+          "name": "Checkout page submission states keeps the empty-cart screen for 'items with a zero total'",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "path": "tests/components/contactus.test.tsx",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "ContactUs component renders the contact form properly",
+          "status": "passed"
+        },
+        {
+          "name": "ContactUs component shows persistent error message when sendMail fails",
+          "status": "passed"
+        },
+        {
+          "name": "ContactUs component clears the error message when a subsequent submission succeeds",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "path": "tests/components/loading.test.tsx",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "Loading components renders LoadingSpinner with expected loader classes",
+          "status": "passed"
+        },
+        {
+          "name": "Loading components renders LoadingSpinner in root app/loading",
+          "status": "passed"
+        },
+        {
+          "name": "Loading components renders LoadingSpinner in app/shop/loading",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "path": "tests/components/newsletter.test.tsx",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "Newsletter component shows error toast when email is empty",
+          "status": "passed"
+        },
+        {
+          "name": "Newsletter component shows error toast when invalid email is entered",
+          "status": "passed"
+        },
+        {
+          "name": "Newsletter component shows success toast and resets email state on valid submission",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "path": "tests/components/shop-cart-identity.test.jsx",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "shop cart row identity preserves the surviving DOM row when removing duplicate 0",
+          "status": "passed"
+        },
+        {
+          "name": "shop cart row identity preserves the surviving DOM row when removing duplicate 1",
+          "status": "passed"
+        },
+        {
+          "name": "product detail cart row identity preserves the surviving DOM row when removing duplicate 0",
+          "status": "passed"
+        },
+        {
+          "name": "product detail cart row identity preserves the surviving DOM row when removing duplicate 1",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "path": "tests/context/CartContext.hydration.test.jsx",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "CartProvider hydration race (Issue #71) keeps previously stored cart items plus the new item when added before hydration effect resolves",
+          "status": "passed"
+        },
+        {
+          "name": "CartProvider hydration race (Issue #71) preserves multiple stored items when multiple pre-hydration additions occur",
+          "status": "passed"
+        },
+        {
+          "name": "CartProvider hydration race (Issue #71) handles pre-hydration adds when localStorage starts completely empty",
+          "status": "passed"
+        },
+        {
+          "name": "CartProvider hydration race (Issue #71) handles pre-hydration removals correctly from stored items",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "path": "tests/context/CartContext.test.jsx",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "CartProvider hydration error handling mounts without throwing and falls back to empty cart when cartItems is corrupt JSON",
+          "status": "passed"
+        },
+        {
+          "name": "CartProvider hydration error handling safely ignores non-array JSON stored in cartItems",
+          "status": "passed"
+        },
+        {
+          "name": "CartProvider hydration error handling hydrates valid cart items and totals cleanly",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "path": "tests/context/CartContext.test.tsx",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "CartContext removeFromCart adds and removes items correctly",
+          "status": "passed"
+        },
+        {
+          "name": "CartContext removeFromCart leaves itemCount and totalPrice unchanged when removing an item not in the cart",
+          "status": "passed"
+        },
+        {
+          "name": "CartContext removeFromCart repeated remove calls can never produce a negative itemCount or totalPrice",
+          "status": "passed"
+        },
+        {
+          "name": "CartContext removeFromCart assigns unique cartItemId to duplicate items and removes specific instance (lower row)",
+          "status": "passed"
+        },
+        {
+          "name": "CartContext removeFromCart removes upper duplicate row and leaves lower row intact",
+          "status": "passed"
+        },
+        {
+          "name": "CartContext removeFromCart supports removal by cartItemId string directly",
+          "status": "passed"
+        },
+        {
+          "name": "CartContext removeFromCart ensures legacy items loaded from localStorage without cartItemId are assigned unique cartItemIds",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "path": "tests/context/CartModalDuplicateRows.test.jsx",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "Cart duplicate rows UI & keys renders duplicate line items with unique keys without console duplicate-key warnings",
+          "status": "passed"
+        },
+        {
+          "name": "Cart duplicate rows UI & keys removes lower duplicate row leaving upper row intact",
+          "status": "passed"
+        },
+        {
+          "name": "Cart duplicate rows UI & keys removes upper duplicate row leaving lower row intact",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "path": "tests/hooks/useToast.test.jsx",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "useToast hook (Issue #31) initializes with toast hidden and empty message",
+          "status": "passed"
+        },
+        {
+          "name": "useToast hook (Issue #31) shows toast with provided message and auto-hides after specified delay",
+          "status": "passed"
+        },
+        {
+          "name": "useToast hook (Issue #31) hideToast immediately dismisses toast and cancels pending auto-hide timer",
+          "status": "passed"
+        },
+        {
+          "name": "useToast hook (Issue #31) consecutive showToast calls reset the auto-hide timer with the latest message",
+          "status": "passed"
+        },
+        {
+          "name": "useToast hook (Issue #31) cleans up pending timer on unmount to prevent state updates on unmounted component",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "path": "tests/lib/AuthContext.test.tsx",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "AuthContext getSession rejection handling handles rejected getSession gracefully, setting loading to false and user to null",
+          "status": "passed"
+        },
+        {
+          "name": "AuthContext getSession rejection handling handles successful getSession properly",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "path": "tests/lib/accessibility.test.ts",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "Accessibility - Color Contrast & Luminance (#39) calculates relative luminance correctly",
+          "status": "passed"
+        },
+        {
+          "name": "Accessibility - Color Contrast & Luminance (#39) calculates contrast ratio correctly",
+          "status": "passed"
+        },
+        {
+          "name": "Accessibility - Color Contrast & Luminance (#39) meetsContrastRequirement returns true for black on white",
+          "status": "passed"
+        },
+        {
+          "name": "Accessibility - Color Contrast & Luminance (#39) meetsContrastRequirement returns false for identical colors",
+          "status": "passed"
+        },
+        {
+          "name": "Accessibility - Color Contrast & Luminance (#39) meetsContrastRequirement handles ~3.8:1 pair like #828282 on #ffffff correctly with largeText flag",
+          "status": "passed"
+        },
+        {
+          "name": "Accessibility - Color Contrast & Luminance (#39) does not call console.warn when meetsContrastRequirement is executed",
+          "status": "passed"
+        },
+        {
+          "name": "Accessibility - DOM and ARIA Helpers isFocusable identifies focusable vs disabled/tabindex=-1 elements",
+          "status": "passed"
+        },
+        {
+          "name": "Accessibility - DOM and ARIA Helpers generateAriaId produces unique prefix IDs",
+          "status": "passed"
+        },
+        {
+          "name": "Accessibility - DOM and ARIA Helpers aria props generators work as expected",
+          "status": "passed"
+        },
+        {
+          "name": "Accessibility - DOM and ARIA Helpers reduced motion helpers work with window.matchMedia",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "path": "tests/lib/auth-context.test.tsx",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "AuthProvider lifecycle & session tests (Issue #95) starts with loading true and flips to false when getSession resolves",
+          "status": "passed"
+        },
+        {
+          "name": "AuthProvider lifecycle & session tests (Issue #95) recognizes admin users based on NEXT_PUBLIC_ADMIN_EMAILS whitelist",
+          "status": "passed"
+        },
+        {
+          "name": "AuthProvider lifecycle & session tests (Issue #95) handles null session on getSession resolution",
+          "status": "passed"
+        },
+        {
+          "name": "AuthProvider lifecycle & session tests (Issue #95) updates user state on onAuthStateChange events and clears on SIGNED_OUT",
+          "status": "passed"
+        },
+        {
+          "name": "AuthProvider lifecycle & session tests (Issue #95) unsubscribes from onAuthStateChange on unmount",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "path": "tests/lib/auth.test.js",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "mapAuthUser returns null for a null/undefined Supabase user",
+          "status": "passed"
+        },
+        {
+          "name": "mapAuthUser prefers full_name from user_metadata",
+          "status": "passed"
+        },
+        {
+          "name": "mapAuthUser falls back to name, then display_name",
+          "status": "passed"
+        },
+        {
+          "name": "mapAuthUser falls back to the email prefix, then the 'User' default",
+          "status": "passed"
+        },
+        {
+          "name": "mapAuthUser prefers avatar_url over picture for the photo",
+          "status": "passed"
+        },
+        {
+          "name": "login returns the mapped user on success",
+          "status": "passed"
+        },
+        {
+          "name": "login throws Error(message) on a mocked Supabase error",
+          "status": "passed"
+        },
+        {
+          "name": "signup returns the mapped user on success",
+          "status": "passed"
+        },
+        {
+          "name": "signup throws Error(message) on a mocked Supabase error",
+          "status": "passed"
+        },
+        {
+          "name": "loginWithGoogle returns the OAuth data on success",
+          "status": "passed"
+        },
+        {
+          "name": "loginWithGoogle throws Error(message) on a mocked Supabase error",
+          "status": "passed"
+        },
+        {
+          "name": "logout resolves when signOut succeeds",
+          "status": "passed"
+        },
+        {
+          "name": "logout throws Error(message) on a mocked Supabase error",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "path": "tests/lib/buyer-orders.test.ts",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "Buyer Orders Management saves an order and caches it in localStorage",
+          "status": "passed"
+        },
+        {
+          "name": "Buyer Orders Management updates an existing order when same orderId is saved again",
+          "status": "passed"
+        },
+        {
+          "name": "Buyer Orders Management fetches orders from Supabase when available",
+          "status": "passed"
+        },
+        {
+          "name": "Buyer Orders Management falls back to local cache when Supabase returns empty",
+          "status": "passed"
+        },
+        {
+          "name": "Buyer Orders Management verifies order on-chain via readOrder",
+          "status": "passed"
+        },
+        {
+          "name": "Buyer Orders Management returns verified false when on-chain order is not found or Unknown",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "path": "tests/lib/checkout-simulate.test.ts",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "Pay Invocation Argument Construction & Simulate Tests produces deterministic 64-char lowercase hex order id hashes",
+          "status": "passed"
+        },
+        {
+          "name": "Pay Invocation Argument Construction & Simulate Tests converts USD amounts to raw units accurately",
+          "status": "passed"
+        },
+        {
+          "name": "Pay Invocation Argument Construction & Simulate Tests builds pay invocation transaction with exact function name and 4 arguments",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "path": "tests/lib/env.test.ts",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "isAdminEmail returns true for admin emails",
+          "status": "passed"
+        },
+        {
+          "name": "isAdminEmail is case insensitive",
+          "status": "passed"
+        },
+        {
+          "name": "isAdminEmail returns false for non-admin emails",
+          "status": "passed"
+        },
+        {
+          "name": "isAdminEmail returns false for null/undefined",
+          "status": "passed"
+        },
+        {
+          "name": "isAdminEmail handles empty admin list",
+          "status": "passed"
+        },
+        {
+          "name": "isDevelopment returns true in development",
+          "status": "passed"
+        },
+        {
+          "name": "isDevelopment returns false in production",
+          "status": "passed"
+        },
+        {
+          "name": "isProduction returns true in production",
+          "status": "passed"
+        },
+        {
+          "name": "isProduction returns false in development",
+          "status": "passed"
+        },
+        {
+          "name": "validateEnv throws an error naming missing fields when required variables are unset",
+          "status": "passed"
+        },
+        {
+          "name": "validateEnv returns populated configuration when all required environment variables are set",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "path": "tests/lib/errors.test.ts",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "Error Classification & Handling Tests (lib/errors.ts) null and undefined handling returns GENERAL_ERRORS.Unknown for null and undefined",
+          "status": "passed"
+        },
+        {
+          "name": "Error Classification & Handling Tests (lib/errors.ts) OrderAlreadyPaid classification resolves Error('OrderAlreadyPaid') and string 'order already paid' to STELLAR_ORDER_ALREADY_PAID",
+          "status": "passed"
+        },
+        {
+          "name": "Error Classification & Handling Tests (lib/errors.ts) balance checks and message length fallback maps 'Insufficient USDC balance' to ACCOUNT_INSUFFICIENT_BALANCE",
+          "status": "passed"
+        },
+        {
+          "name": "Error Classification & Handling Tests (lib/errors.ts) balance checks and message length fallback falls back to generic userMessage for unknown errors over 100 characters",
+          "status": "passed"
+        },
+        {
+          "name": "Error Classification & Handling Tests (lib/errors.ts) balance checks and message length fallback preserves original message for unknown errors under or equal to 100 characters",
+          "status": "passed"
+        },
+        {
+          "name": "Error Classification & Handling Tests (lib/errors.ts) getUserMessage and isRecoverable helpers returns userMessage matching parseError result",
+          "status": "passed"
+        },
+        {
+          "name": "Error Classification & Handling Tests (lib/errors.ts) getUserMessage and isRecoverable helpers reflects the recoverable flag from AppError",
+          "status": "passed"
+        },
+        {
+          "name": "Error Classification & Handling Tests (lib/errors.ts) WalletError classification by .code property classifies WalletError instances by their .code property",
+          "status": "passed"
+        },
+        {
+          "name": "Error Classification & Handling Tests (lib/errors.ts) Table schema integrity ensures every STELLAR_ERRORS entry maps to defined code and userMessage",
+          "status": "passed"
+        },
+        {
+          "name": "Error Classification & Handling Tests (lib/errors.ts) Table schema integrity creates custom AppError objects accurately with createError",
+          "status": "passed"
+        },
+        {
+          "name": "Error Classification & Handling Tests (lib/errors.ts) AUTH_ERRORS vs broad Stellar keyword heuristics precedence matches exact auth message when it contains broad keyword like 'cancelled'",
+          "status": "passed"
+        },
+        {
+          "name": "Error Classification & Handling Tests (lib/errors.ts) AUTH_ERRORS vs broad Stellar keyword heuristics precedence matches pure Stellar message 'Transaction cancelled by user' to USER_REJECTED",
+          "status": "passed"
+        },
+        {
+          "name": "Error Classification & Handling Tests (lib/errors.ts) AUTH_ERRORS vs broad Stellar keyword heuristics precedence prioritizes auth errors over other common keywords like 'insufficient' or 'timeout'",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "path": "tests/lib/hash-order-id.test.ts",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "hashOrderId produces a 32-byte digest",
+          "status": "passed"
+        },
+        {
+          "name": "hashOrderId is deterministic \u2014 same input yields same output",
+          "status": "passed"
+        },
+        {
+          "name": "hashOrderId produces different hashes for different inputs (>32 chars)",
+          "status": "passed"
+        },
+        {
+          "name": "hashOrderId is not a naive byte-copy stub \u2014 hash of 40 'a's differs from first-32-bytes-only",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "path": "tests/lib/products.test.ts",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "lib/products data layer mapProduct returns null when passed null or undefined",
+          "status": "passed"
+        },
+        {
+          "name": "lib/products data layer mapProduct coerces price strings to Number and preserves product fields",
+          "status": "passed"
+        },
+        {
+          "name": "lib/products data layer mapProduct handles already numeric prices correctly",
+          "status": "passed"
+        },
+        {
+          "name": "lib/products data layer listProducts fetches products ordered by created_at desc and maps each product",
+          "status": "passed"
+        },
+        {
+          "name": "lib/products data layer listProducts throws error when Supabase select fails",
+          "status": "passed"
+        },
+        {
+          "name": "lib/products data layer getProductById fetches a single product by ID and maps it",
+          "status": "passed"
+        },
+        {
+          "name": "lib/products data layer getProductById returns null when product is not found",
+          "status": "passed"
+        },
+        {
+          "name": "lib/products data layer getProductById throws error when Supabase lookup fails",
+          "status": "passed"
+        },
+        {
+          "name": "lib/products data layer uploadProductImage uploads file with timestamped name and returns public URL",
+          "status": "passed"
+        },
+        {
+          "name": "lib/products data layer uploadProductImage throws error when storage upload fails",
+          "status": "passed"
+        },
+        {
+          "name": "lib/products data layer createProduct inserts a new product and returns the mapped created product",
+          "status": "passed"
+        },
+        {
+          "name": "lib/products data layer createProduct throws error when insert fails",
+          "status": "passed"
+        },
+        {
+          "name": "lib/products data layer updateProduct updates product fields by id and returns mapped product",
+          "status": "passed"
+        },
+        {
+          "name": "lib/products data layer updateProduct throws error when update fails",
+          "status": "passed"
+        },
+        {
+          "name": "lib/products data layer deleteProduct deletes a product by id",
+          "status": "passed"
+        },
+        {
+          "name": "lib/products data layer deleteProduct throws error when delete fails",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "path": "tests/lib/scval.test.ts",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "hashOrderId produces a 32-byte Uint8Array digest",
+          "status": "passed"
+        },
+        {
+          "name": "hashOrderId is deterministic for identical inputs",
+          "status": "passed"
+        },
+        {
+          "name": "hashOrderId produces different hashes for inputs sharing the first 32 characters (input sensitivity for >32 chars)",
+          "status": "passed"
+        },
+        {
+          "name": "hashOrderId matches standard SHA-256 test vectors",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "path": "tests/lib/sendmail.test.ts",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "lib/sendmail.js validateEmailConfig / missing env vars throws naming all missing NEXT_PUBLIC_EMAILJS_* variables when none are set",
+          "status": "passed"
+        },
+        {
+          "name": "lib/sendmail.js validateEmailConfig / missing env vars throws naming specific missing variables when only some are unset",
+          "status": "passed"
+        },
+        {
+          "name": "lib/sendmail.js sendMail execution resolves the emailjs response and passes correct service, template, params, and key",
+          "status": "passed"
+        },
+        {
+          "name": "lib/sendmail.js sendMail execution falls back recipient_email to NEXT_PUBLIC_DEFAULT_RECIPIENT_EMAIL when recipientEmail is omitted",
+          "status": "passed"
+        },
+        {
+          "name": "lib/sendmail.js sendMail execution handles default empty strings for omitted optional arguments",
+          "status": "passed"
+        },
+        {
+          "name": "lib/sendmail.js sendMail execution rejects and rethrows when emailjs.send fails",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "path": "tests/lib/session-cleanup.test.ts",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "Auth and Session persistence preserves supabase auth tokens when cart items are cleared",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "path": "tests/lib/supabase.test.ts",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "lib/supabase calls createClient with configured environment variables and auth options",
+          "status": "passed"
+        },
+        {
+          "name": "lib/supabase warns and uses placeholders when environment variables are missing",
+          "status": "passed"
+        },
+        {
+          "name": "lib/supabase warns when only NEXT_PUBLIC_SUPABASE_URL is provided",
+          "status": "passed"
+        },
+        {
+          "name": "lib/supabase warns when only NEXT_PUBLIC_SUPABASE_ANON_KEY is provided",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "path": "tests/lib/stellar/account.test.ts",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "formatAmount formats MIN_NATIVE_RESERVE with 7 decimals correctly",
+          "status": "passed"
+        },
+        {
+          "name": "formatAmount formats decimal amounts with fractional parts correctly",
+          "status": "passed"
+        },
+        {
+          "name": "formatAmount trims trailing zeros cleanly",
+          "status": "passed"
+        },
+        {
+          "name": "formatAmount handles negative values with a leading minus sign",
+          "status": "passed"
+        },
+        {
+          "name": "formatAmount handles zero correctly",
+          "status": "passed"
+        },
+        {
+          "name": "formatAmount handles decimals = 0 without error",
+          "status": "passed"
+        },
+        {
+          "name": "formatAmount handles integers exceeding Number.MAX_SAFE_INTEGER without precision loss",
+          "status": "passed"
+        },
+        {
+          "name": "isAccountMissingError identifies 404 status and account not found messages",
+          "status": "passed"
+        },
+        {
+          "name": "isAccountMissingError identifies network and RPC outages as NOT account-missing",
+          "status": "passed"
+        },
+        {
+          "name": "loadAccount never calls friendbot and rejects when getAccount fails with a network error",
+          "status": "passed"
+        },
+        {
+          "name": "loadAccount triggers friendbot funding and re-loads account when getAccount fails with account-missing error",
+          "status": "passed"
+        },
+        {
+          "name": "getNativeBalance returns balance when getAccountEntry succeeds",
+          "status": "passed"
+        },
+        {
+          "name": "getNativeBalance surfaces RPC / network rejections rather than returning 0n",
+          "status": "passed"
+        },
+        {
+          "name": "getNativeBalance returns 0n when getAccountEntry indicates account does not exist (not found)",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "path": "tests/lib/stellar/checkout.test.ts",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "usdToRawUnits converts a typical USD price to 7-decimal raw units",
+          "status": "passed"
+        },
+        {
+          "name": "usdToRawUnits is floating-point safe for prices like 0.29",
+          "status": "passed"
+        },
+        {
+          "name": "usdToRawUnits handles the smallest unit and whole dollars",
+          "status": "passed"
+        },
+        {
+          "name": "usdToRawUnits throws WalletError with code INVALID_AMOUNT for zero",
+          "status": "passed"
+        },
+        {
+          "name": "usdToRawUnits throws WalletError with code INVALID_AMOUNT for negative",
+          "status": "passed"
+        },
+        {
+          "name": "usdToRawUnits throws WalletError with code INVALID_AMOUNT for NaN",
+          "status": "passed"
+        },
+        {
+          "name": "usdToRawUnits throws WalletError with code INVALID_AMOUNT for Infinity",
+          "status": "passed"
+        },
+        {
+          "name": "orderIdHash returns a deterministic 64-character hex string",
+          "status": "passed"
+        },
+        {
+          "name": "payWithStellar throws CONTRACT_NOT_CONFIGURED if CHECKOUT_CONTRACT_ID is empty",
+          "status": "passed"
+        },
+        {
+          "name": "payWithStellar executes full successful checkout payment flow",
+          "status": "passed"
+        },
+        {
+          "name": "payWithStellar throws TX_SIMULATION_ERROR when simulation report fails",
+          "status": "passed"
+        },
+        {
+          "name": "payWithStellar throws TX_SEND_ERROR when server rejects transaction submission",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "path": "tests/lib/stellar/events.test.ts",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "decodePaymentEvent decodes a full pay event (topics + amount map + contract id)",
+          "status": "passed"
+        },
+        {
+          "name": "decodePaymentEvent skips events whose first topic is not the 'pay' symbol",
+          "status": "passed"
+        },
+        {
+          "name": "decodePaymentEvent skips events whose first topic is a string instead of a symbol",
+          "status": "passed"
+        },
+        {
+          "name": "decodePaymentEvent tolerates fewer than five topics (only fills the slots present)",
+          "status": "passed"
+        },
+        {
+          "name": "decodePaymentEvent returns null when no pay event exists in the transaction",
+          "status": "passed"
+        },
+        {
+          "name": "decodePaymentEvent decodes a non-map data ScVal with the generic scValToString path",
+          "status": "passed"
+        },
+        {
+          "name": "decodePaymentEvent decodes from a base64 XDR round-trip of the event (what getTransaction returns)",
+          "status": "passed"
+        },
+        {
+          "name": "waitForTransaction resolves immediately when status is SUCCESS",
+          "status": "passed"
+        },
+        {
+          "name": "waitForTransaction throws error when transaction status is FAILED",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "path": "tests/lib/stellar/freighter.test.ts",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "shortAddress returns an empty string for null or empty input",
+          "status": "passed"
+        },
+        {
+          "name": "shortAddress returns addresses at or below the threshold unchanged",
+          "status": "passed"
+        },
+        {
+          "name": "shortAddress truncates a 56-char Stellar address to the first and last 6 chars",
+          "status": "passed"
+        },
+        {
+          "name": "shortAddress honours a custom chars argument",
+          "status": "passed"
+        },
+        {
+          "name": "WalletError is an Error named WalletError with the default code",
+          "status": "passed"
+        },
+        {
+          "name": "WalletError preserves custom codes used by the UI",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "path": "tests/lib/stellar/indexer.test.ts",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "PaymentEventIndexer startup retry (Issue #68) retries getLatestLedger when initial call fails and recovers without 'no cursor' error",
+          "status": "passed"
+        },
+        {
+          "name": "PaymentEventIndexer startup retry (Issue #68) handles continuous poll updates when initialized normally",
+          "status": "passed"
+        },
+        {
+          "name": "PaymentEventIndexer startup retry (Issue #68) stops cleanly and ceases polling after stop() is called",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "path": "tests/lib/stellar/scval.test.ts",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "ScVal helpers i128ToScVal matches nativeToScVal XDR base64 for key boundary values",
+          "status": "passed"
+        },
+        {
+          "name": "ScVal helpers i128ToScVal accepts number and string inputs",
+          "status": "passed"
+        },
+        {
+          "name": "ScVal helpers bytes32ToScVal accepts exactly 32-byte Uint8Array",
+          "status": "passed"
+        },
+        {
+          "name": "ScVal helpers bytes32ToScVal accepts 64-character hex string",
+          "status": "passed"
+        },
+        {
+          "name": "ScVal helpers bytes32ToScVal throws on inputs not equal to 32 bytes",
+          "status": "passed"
+        },
+        {
+          "name": "ScVal helpers bytes32ToScVal throws when passed a 64-character non-hex string instead of producing zero bytes",
+          "status": "passed"
+        },
+        {
+          "name": "ScVal helpers hexToBytes and bytesToHex round-trips hex and bytes with normalized lowercase output",
+          "status": "passed"
+        },
+        {
+          "name": "ScVal helpers hexToBytes and bytesToHex returns an empty Uint8Array for empty string",
+          "status": "passed"
+        },
+        {
+          "name": "ScVal helpers hexToBytes and bytesToHex throws on odd-length hex strings",
+          "status": "passed"
+        },
+        {
+          "name": "ScVal helpers hexToBytes and bytesToHex throws on invalid hex characters instead of returning zero bytes",
+          "status": "passed"
+        },
+        {
+          "name": "ScVal helpers scValToString and scValToNativeSafe decodes symbols, strings, and booleans",
+          "status": "passed"
+        },
+        {
+          "name": "ScVal helpers scValToString and scValToNativeSafe decodes negative i128 correctly",
+          "status": "passed"
+        },
+        {
+          "name": "ScVal helpers scValToString and scValToNativeSafe decodes bytes to hex string",
+          "status": "passed"
+        },
+        {
+          "name": "ScVal helpers hashOrderId deterministically returns a 32-byte Uint8Array",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "path": "tests/lib/stellar/simulate.test.ts",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "Simulate Fee Math & Transaction Builder Tests (lib/stellar/simulate.ts) recommendedInclusionFee returns BigInt(max) for an all-digits max string",
+          "status": "passed"
+        },
+        {
+          "name": "Simulate Fee Math & Transaction Builder Tests (lib/stellar/simulate.ts) recommendedInclusionFee falls back to BigInt(BASE_FEE) when max is non-numeric or malformed",
+          "status": "passed"
+        },
+        {
+          "name": "Simulate Fee Math & Transaction Builder Tests (lib/stellar/simulate.ts) recommendedInclusionFee falls back to BigInt(BASE_FEE) when sorobanInclusionFee is missing",
+          "status": "passed"
+        },
+        {
+          "name": "Simulate Fee Math & Transaction Builder Tests (lib/stellar/simulate.ts) recommendedInclusionFee falls back to BigInt(BASE_FEE) when getFeeStats throws an error",
+          "status": "passed"
+        },
+        {
+          "name": "Simulate Fee Math & Transaction Builder Tests (lib/stellar/simulate.ts) budgetFee returns ((higher of inclusion/minResource) + FEE_BUFFER_STROOPS).toString() when inclusion > minResource",
+          "status": "passed"
+        },
+        {
+          "name": "Simulate Fee Math & Transaction Builder Tests (lib/stellar/simulate.ts) budgetFee returns ((higher of inclusion/minResource) + FEE_BUFFER_STROOPS).toString() when minResource > inclusion",
+          "status": "passed"
+        },
+        {
+          "name": "Simulate Fee Math & Transaction Builder Tests (lib/stellar/simulate.ts) budgetFee handles report.ok = false by falling back minResourceFee to 0n",
+          "status": "passed"
+        },
+        {
+          "name": "Simulate Fee Math & Transaction Builder Tests (lib/stellar/simulate.ts) buildInvocationTransaction uses BASE_FEE and configured NETWORK_PASSPHRASE by default",
+          "status": "passed"
+        },
+        {
+          "name": "Simulate Fee Math & Transaction Builder Tests (lib/stellar/simulate.ts) buildInvocationTransaction honours an explicit fee passed by caller",
+          "status": "passed"
+        }
+      ]
+    }
+  ],
+  "negative_control": {
+    "scope": "New real shop page row identity tests with PR353 CartContext but original page keys",
+    "passed": 0,
+    "failed": 4,
+    "raw_report_sha256": "0c48045833ecb895cf1424e9997164331e2ed75f8db25a7cb7325e03b388d2c5"
+  },
+  "source_blobs": {
+    "app/(landingpage)/ContactUs.jsx": "4fbfc5eb9d65e6fbc1af71a4319a2e8e19a239da",
+    "app/shop/page.jsx": "cbf9335a2c941e82e0039b307b9f34efa6864057",
+    "app/shop/[id]/page.jsx": "a20d6cb1cc067f223381e5462941a0697ca06687",
+    "components/Toast.jsx": "fbc14c4b55e6452a26d3e411333c0eb7ceeb37bb",
+    "context/CartContext.jsx": "5ec6b728c1ecaa0408af657c1ce0e4df343630e0",
+    "tests/components/Toast.test.jsx": "1fdddbc4a2c000f946fe1a826ce436a6ca9af161",
+    "tests/components/checkout.test.tsx": "fa6246919d96b099ed6147f503c180a5ede78d62",
+    "tests/components/shop-cart-identity.test.jsx": "cbdd5b304018df51e1f70e23878f65823c073abd",
+    "tests/lib/validation.test.ts": null,
+    "tests/lib/products.test.ts": "c2b001d068efcb1c4a3c256733d7b7b8b82fa034",
+    ".gitattributes": "6313b56c57848efce05faa7aa7e901ccfc2886ea",
+    "supabase/schema.sql": "ab8778a309d57091ce2c4f8870196d31995c49bc",
+    "tests/db/README.md": "20033bbbe3e98087232e6c832941de1506778155",
+    "tests/db/products-schema.test.cjs": "35f2d37350a5cc54ae574081bb6e0dd184dc542f"
+  },
+  "inherited_checks": [
+    {
+      "source": "https://github.com/woahwhattheheck/mova-store/pull/10",
+      "head": "7ed4f23e340aeb6879a6b6896b57db2266338d7a",
+      "check": "PGlite fresh/legacy schema regression",
+      "passed": 2,
+      "failed": 0,
+      "executed_by": "SEDGE"
+    },
+    {
+      "source": "https://github.com/woahwhattheheck/mova-store/pull/11",
+      "head": "15c1119ceab1d1fc54defce567fddf31c05c126f",
+      "check": "All 20 binary asset index blobs preserved; CRLF text still normalizes to LF",
+      "executed_by": "SEDGE-DELTA"
+    }
+  ],
+  "not_executed": [
+    "Next production build",
+    "browser visual QA",
+    "hosted Supabase operations",
+    "live payment or email",
+    "upstream submission"
+  ],
+  "limits": [
+    "Lint exits zero with three existing warnings",
+    "SQL and Git attributes results are inherited; their source blobs are adopted unchanged",
+    "Product test clock adaptation was executed in the final combined frontend suite",
+    "Unrelated pre-existing worktree differences are excluded from the commit"
+  ]
+}

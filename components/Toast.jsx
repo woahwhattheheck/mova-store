@@ -4,31 +4,28 @@ const Toast = ({ message, show, onClose, time = 3000 }) => {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    if (show) {
-      setVisible(true);
-
-      const timer = setTimeout(() => {
-        setVisible(false);
-      }, time);
-
-      let exitTimer: ReturnType<typeof setTimeout> | null = null;
-      const scheduleExit = () => {
-        exitTimer = setTimeout(() => {
-          onClose();
-        }, 300);
-      };
-
-      const exitScheduler = setTimeout(scheduleExit, 0);
-
-      return () => {
-        clearTimeout(timer);
-        clearTimeout(exitScheduler);
-        if (exitTimer !== null) clearTimeout(exitTimer);
-      };
-    } else {
+    if (!show) {
       setVisible(false);
+      return;
     }
-  }, [show, onClose, time]);
+
+    setVisible(true);
+
+    /** @type {ReturnType<typeof setTimeout> | null} */
+    let exitTimer = null;
+    const timer = setTimeout(() => {
+      setVisible(false);
+      exitTimer = setTimeout(() => {
+        onClose();
+      }, 300);
+    }, time);
+
+    return () => {
+      clearTimeout(timer);
+      if (exitTimer !== null) clearTimeout(exitTimer);
+    };
+    // A replacement message gets its own display and exit window.
+  }, [show, onClose, time, message]);
 
   return (
     <div

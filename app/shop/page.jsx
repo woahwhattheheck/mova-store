@@ -92,7 +92,7 @@ export default function Products() {
         ) : (
           <div>
             {cartItems.map((item) => (
-              <div key={item.id} className="flex justify-between items-center mb-2">
+              <div key={item.cartItemId} className="flex justify-between items-center mb-2">
                 <div className="w-16 h-16 flex-shrink-0">
                   <Image
                     src={item.img} // Ensure this URL is correct
