@@ -1,0 +1,126 @@
+name: KEEL inbox validation
+
+on:
+  push:
+    branches: [review/keel-mova-inbox-20260906]
+    paths: [.github/workflows/keel-inbox-validation.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  native-checks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      CI: "true"
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Execute baseline and exact submitted heads
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import pathlib
+          import shutil
+          import subprocess
+          import tempfile
+          import time
+
+          root = pathlib.Path.cwd()
+          evidence = root / 'keel-evidence'
+          evidence.mkdir()
+          base = '65d9dfb09cbf544edbd0d6ac2954219427f734c7'
+          revisions = {
+              'baseline': base,
+              'pr373': '6048476175c1f19951d8dd29fc15cc041a31b8f4',
+              'pr374': '40c86205a8572967f3aaa244388f763bfa46fc27',
+              'pr375': '2d28a6f473ba0fc846c95598d96309dafd49d94b',
+              'pr377': '98fe3e0877250076f8b2ea7b258a3c228cc90cf6',
+          }
+          summary = {'baseline': base, 'node': subprocess.check_output(['node', '--version'], text=True).strip(), 'results': {}}
+          (evidence / 'revisions.json').write_text(json.dumps(revisions, indent=2) + '\n')
+          work_root = pathlib.Path(tempfile.mkdtemp(prefix='keel-native-'))
+
+          def execute(argv, cwd, log, timeout=420):
+              start = time.monotonic()
+              with log.open('w') as out:
+                  out.write('$ ' + ' '.join(argv) + '\n')
+                  out.flush()
+                  try:
+                      rc = subprocess.run(argv, cwd=cwd, stdout=out, stderr=subprocess.STDOUT, timeout=timeout).returncode
+                  except subprocess.TimeoutExpired:
+                      out.write('\nCOMMAND TIMEOUT\n')
+                      rc = 124
+              print(f'COMMAND {cwd.name}: {argv} -> {rc}', flush=True)
+              print('\n'.join(log.read_text(errors='replace').splitlines()[-55:]), flush=True)
+              return {'command': argv, 'exit_code': rc, 'seconds': round(time.monotonic() - start, 3)}
+
+          for label, sha in revisions.items():
+              subprocess.run(['git', 'fetch', '--no-tags', 'origin', sha], check=True)
+              subprocess.run(['git', 'worktree', 'add', '--detach', str(work_root / label), sha], check=True)
+          baseline = work_root / 'baseline'
+          install = execute(['npm', 'ci', '--no-audit', '--no-fund'], baseline, evidence / 'npm-ci.log', timeout=600)
+          summary['install'] = install
+          if install['exit_code']:
+              (evidence / 'summary.json').write_text(json.dumps(summary, indent=2) + '\n')
+              raise SystemExit(install['exit_code'])
+
+          for label, sha in revisions.items():
+              work = work_root / label
+              dest = evidence / label
+              dest.mkdir()
+              if label != 'baseline':
+                  (work / 'node_modules').symlink_to(baseline / 'node_modules', target_is_directory=True)
+              observed = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=work, text=True).strip()
+              assert observed == sha, (observed, sha)
+              for name in ['package.json', 'package-lock.json']:
+                  assert (work / name).read_bytes() == (baseline / name).read_bytes(), f'{label}: dependency drift in {name}'
+              changed = subprocess.check_output(['git', 'diff', '--name-only', base, sha], cwd=root, text=True).splitlines()
+              (dest / 'changed-paths.txt').write_text('\n'.join(changed) + '\n')
+              for name in changed:
+                  source = work / name
+                  if source.is_file():
+                      output = dest / 'source' / name
+                      output.parent.mkdir(parents=True, exist_ok=True)
+                      shutil.copyfile(source, output)
+              results = {'head': observed, 'changed_paths': changed}
+              results['tests'] = execute(['npm', 'run', 'test', '--', '--pool=forks', '--maxWorkers=2', '--minWorkers=1', '--reporter=json', '--outputFile=' + str(dest / 'vitest.json')], work, dest / 'tests.log')
+              test_report = dest / 'vitest.json'
+              if test_report.exists():
+                  report = json.loads(test_report.read_text())
+                  results['test_counts'] = {key: report.get(key) for key in ['numTotalTests', 'numPassedTests', 'numFailedTests', 'numPendingTests', 'numTotalTestSuites', 'numFailedTestSuites', 'success']}
+                  print('TEST COUNTS', label, json.dumps(results['test_counts']), flush=True)
+                  for suite in report.get('testResults', []):
+                      for test in suite.get('assertionResults', []):
+                          if test.get('status') == 'failed':
+                              print('FAILED ASSERTION', label, test.get('fullName'), '\n'.join(test.get('failureMessages', [])), flush=True)
+              results['typecheck'] = execute(['npm', 'run', 'type-check'], work, dest / 'typecheck.log')
+              results['lint'] = execute(['npm', 'run', 'lint', '--', '--no-cache'], work, dest / 'lint.log')
+              formatted = [name for name in changed if pathlib.Path(name).suffix in {'.js', '.jsx', '.ts', '.tsx', '.json', '.md'} and (work / name).is_file()]
+              if formatted:
+                  results['changed_file_format'] = execute(['npx', '--no-install', 'prettier', '--check', *formatted], work, dest / 'format.log')
+              summary['results'][label] = results
+              (evidence / 'summary.json').write_text(json.dumps(summary, indent=2) + '\n')
+          print('FINAL SUMMARY\n' + json.dumps(summary, indent=2), flush=True)
+          # Preserve diagnostics for every revision, but do not report a green job
+          # when a measured test/type/lint/format command has failed.
+          failed = any(value.get('exit_code', 0) != 0 for result in summary['results'].values() for value in result.values() if isinstance(value, dict))
+          raise SystemExit(1 if failed else 0)
+          PY
+      - name: Preserve all diagnostics and exact changed sources
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: keel-inbox-native-evidence
+          path: keel-evidence/
+          if-no-files-found: error
+          retention-days: 14
