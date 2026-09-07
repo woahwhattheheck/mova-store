@@ -1,0 +1,100 @@
+name: Cedar Sidebar PR363 verification
+
+on:
+  push:
+    branches: [ci/cedar-sidebar-363-20260907]
+    paths: [.github/workflows/cedar-sidebar-363.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact submitted source
+        uses: actions/checkout@v4
+        with:
+          ref: e6057f5f73ddfe85351cd4acfa75e9de6f12e70f
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Setup repository CI Node major
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - name: Install unchanged locked dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Verify source identity and focused behavior
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/cedar-evidence"
+          export EVIDENCE="$RUNNER_TEMP/cedar-evidence"
+          test "$(git rev-parse HEAD)" = e6057f5f73ddfe85351cd4acfa75e9de6f12e70f
+          {
+            git rev-parse HEAD
+            node --version
+            npm --version
+            git ls-files -s components/Sidebar.jsx tests/components/Sidebar.test.tsx package-lock.json
+            npm ls --depth=0
+          } > "$EVIDENCE/identity.txt" 2>&1
+          set +e
+          npm test -- tests/components/Sidebar.test.tsx --maxWorkers=1 --minWorkers=1 --reporter=verbose --reporter=json --outputFile="$EVIDENCE/head.json" > "$EVIDENCE/head.log" 2>&1
+          test_code=$?
+          npm run lint -- --file components/Sidebar.jsx --file tests/components/Sidebar.test.tsx > "$EVIDENCE/lint.log" 2>&1
+          lint_code=$?
+          ./node_modules/.bin/prettier --check components/Sidebar.jsx tests/components/Sidebar.test.tsx > "$EVIDENCE/format.log" 2>&1
+          format_code=$?
+          npm run type-check -- --incremental false > "$EVIDENCE/head-typecheck.log" 2>&1
+          type_code=$?
+          set -e
+          printf 'head_tests=%s\nfocused_lint=%s\nfocused_format=%s\nhead_typecheck=%s\n' "$test_code" "$lint_code" "$format_code" "$type_code" | tee "$EVIDENCE/exit-codes.txt"
+          cat "$EVIDENCE/head.log" "$EVIDENCE/lint.log" "$EVIDENCE/format.log" "$EVIDENCE/head-typecheck.log"
+          cp components/Sidebar.jsx "$EVIDENCE/Sidebar.jsx"
+          cp tests/components/Sidebar.test.tsx "$EVIDENCE/Sidebar.test.tsx"
+          git diff --exit-code -- components/Sidebar.jsx tests/components/Sidebar.test.tsx package.json package-lock.json
+          git show 65d9dfb09cbf544edbd0d6ac2954219427f734c7:components/Sidebar.jsx > components/Sidebar.jsx
+          set +e
+          npm test -- tests/components/Sidebar.test.tsx --maxWorkers=1 --minWorkers=1 --reporter=verbose --reporter=json --outputFile="$EVIDENCE/baseline-source-control.json" > "$EVIDENCE/baseline-source-control.log" 2>&1
+          control_code=$?
+          set -e
+          git restore --source=HEAD -- components/Sidebar.jsx
+          echo "baseline_source_control=$control_code" | tee -a "$EVIDENCE/exit-codes.txt"
+          cat "$EVIDENCE/baseline-source-control.log"
+          git worktree add --detach "$RUNNER_TEMP/cedar-baseline" 65d9dfb09cbf544edbd0d6ac2954219427f734c7
+          ln -s "$GITHUB_WORKSPACE/node_modules" "$RUNNER_TEMP/cedar-baseline/node_modules"
+          set +e
+          (cd "$RUNNER_TEMP/cedar-baseline" && npm run type-check -- --incremental false) > "$EVIDENCE/base-typecheck.log" 2>&1
+          base_type_code=$?
+          set -e
+          echo "base_typecheck=$base_type_code" | tee -a "$EVIDENCE/exit-codes.txt"
+          cat "$EVIDENCE/base-typecheck.log"
+          diff -u "$EVIDENCE/base-typecheck.log" "$EVIDENCE/head-typecheck.log" | tee "$EVIDENCE/typecheck-diff.txt"
+          ./node_modules/.bin/prettier --write components/Sidebar.jsx tests/components/Sidebar.test.tsx > "$EVIDENCE/format-write.log" 2>&1
+          git diff -- components/Sidebar.jsx tests/components/Sidebar.test.tsx > "$EVIDENCE/format-only.patch"
+          cat "$EVIDENCE/format-only.patch"
+          git restore --source=HEAD -- components/Sidebar.jsx tests/components/Sidebar.test.tsx
+          python3 - <<'PY'
+          import json, os, pathlib
+          d = pathlib.Path(os.environ['EVIDENCE'])
+          head = json.loads((d / 'head.json').read_text())
+          old = json.loads((d / 'baseline-source-control.json').read_text())
+          assert head['numPassedTests'] == 6 and head['numFailedTests'] == 0, head
+          assert old['numPassedTests'] == 4 and old['numFailedTests'] == 2, old
+          assert {t['fullName'] for s in head['testResults'] for t in s['assertionResults']} == {t['fullName'] for s in old['testResults'] for t in s['assertionResults']}
+          print('Six current-head tests pass; both route/label regressions reject original production source; four unchanged behaviors retained.')
+          PY
+          test "$test_code" -eq 0
+          test "$lint_code" -eq 0
+          test "$control_code" -ne 0
+          test "$type_code" -eq "$base_type_code"
+          test "$format_code" -eq 0
+      - name: Preserve exact results even on a failed check
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cedar-sidebar-363-e6057f5-evidence
+          path: ${{ runner.temp }}/cedar-evidence
+          if-no-files-found: error
