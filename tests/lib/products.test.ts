@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // Mock supabase before importing lib/products
 const mockStorageFrom = {
@@ -31,6 +31,12 @@ import {
 describe("lib/products data layer", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-09-01T00:00:00Z"));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   describe("mapProduct", () => {
@@ -162,7 +168,9 @@ describe("lib/products data layer", () => {
         error: null,
       });
       mockStorageFrom.getPublicUrl.mockReturnValue({
-        data: { publicUrl: "https://dummy.supabase.co/storage/v1/object/public/products/12345.png" },
+        data: {
+          publicUrl: "https://dummy.supabase.co/storage/v1/object/public/products/12345.png",
+        },
       });
 
       const url = await uploadProductImage(mockFile);
@@ -231,7 +239,13 @@ describe("lib/products data layer", () => {
   describe("updateProduct", () => {
     it("updates product fields by id and returns mapped product", async () => {
       const updates = { name: "Updated Shoe", price: 130 };
-      const returnedRow = { id: "p-1", img: "/shoe.png", ...updates, price: "130", updated_at: "2026-09-01T00:00:00Z" };
+      const returnedRow = {
+        id: "p-1",
+        img: "/shoe.png",
+        ...updates,
+        price: "130",
+        updated_at: "2026-09-01T00:00:00Z",
+      };
 
       const mockSingle = vi.fn().mockResolvedValue({ data: returnedRow, error: null });
       const mockSelect = vi.fn().mockReturnValue({ single: mockSingle });
@@ -242,7 +256,11 @@ describe("lib/products data layer", () => {
       const res = await updateProduct("p-1", updates);
 
       expect(mockFrom).toHaveBeenCalledWith("products");
-      expect(mockUpdate).toHaveBeenCalledWith(updates);
+      expect(mockUpdate).toHaveBeenCalledWith({
+        ...updates,
+        img: undefined,
+        updated_at: "2026-09-01T00:00:00.000Z",
+      });
       expect(mockEq).toHaveBeenCalledWith("id", "p-1");
       expect(res).toEqual({
         id: "p-1",
@@ -288,9 +306,7 @@ describe("lib/products data layer", () => {
       const mockDelete = vi.fn().mockReturnValue({ eq: mockEq });
       mockFrom.mockReturnValue({ delete: mockDelete });
 
-      await expect(deleteProduct("p-del")).rejects.toThrow(
-        "Foreign key constraint violation"
-      );
+      await expect(deleteProduct("p-del")).rejects.toThrow("Foreign key constraint violation");
     });
   });
 });
