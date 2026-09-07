@@ -40,9 +40,7 @@ describe("Toast display and exit lifecycle", () => {
 
   it("honors a custom display duration rather than closing after 300ms", () => {
     const onClose = vi.fn();
-    render(
-      <Toast message="long" show={true} onClose={onClose} time={7000} />,
-    );
+    render(<Toast message="long" show={true} onClose={onClose} time={7000} />);
 
     advance(6999);
     expect(screen.getByText("long")).toHaveClass("opacity-100");
@@ -71,9 +69,7 @@ describe("Toast display and exit lifecycle", () => {
   it("does not close a fresh toast shown within the previous exit window", () => {
     const onCloseA = vi.fn();
     const onCloseB = vi.fn();
-    const { rerender } = render(
-      <Toast message="A" show={true} onClose={onCloseA} time={3000} />,
-    );
+    const { rerender } = render(<Toast message="A" show={true} onClose={onCloseA} time={3000} />);
 
     // A is now exiting. B starts 100ms into that 300ms exit window.
     advance(3100);
@@ -96,9 +92,7 @@ describe("Toast display and exit lifecycle", () => {
   it("closes an immediately replaced toast after its own full duration", () => {
     const onCloseA = vi.fn();
     const onCloseB = vi.fn();
-    const { rerender } = render(
-      <Toast message="A" show={true} onClose={onCloseA} />,
-    );
+    const { rerender } = render(<Toast message="A" show={true} onClose={onCloseA} />);
     rerender(<Toast message="B" show={true} onClose={onCloseB} />);
 
     advance(3299);
@@ -111,9 +105,7 @@ describe("Toast display and exit lifecycle", () => {
 
   it("restarts for a new message even with the same callback and show flag", () => {
     const onClose = vi.fn();
-    const { rerender } = render(
-      <Toast message="A" show={true} onClose={onClose} />,
-    );
+    const { rerender } = render(<Toast message="A" show={true} onClose={onClose} />);
 
     advance(3100);
     rerender(<Toast message="B" show={true} onClose={onClose} />);
@@ -126,9 +118,7 @@ describe("Toast display and exit lifecycle", () => {
 
   it("does not call onClose after unmounting mid-exit", () => {
     const onClose = vi.fn();
-    const { unmount } = render(
-      <Toast message="test" show={true} onClose={onClose} />,
-    );
+    const { unmount } = render(<Toast message="test" show={true} onClose={onClose} />);
 
     advance(3100);
     expect(onClose).not.toHaveBeenCalled();
@@ -139,9 +129,7 @@ describe("Toast display and exit lifecycle", () => {
 
   it("cancels the display timer when unmounted before the exit phase", () => {
     const onClose = vi.fn();
-    const { unmount } = render(
-      <Toast message="test" show={true} onClose={onClose} />,
-    );
+    const { unmount } = render(<Toast message="test" show={true} onClose={onClose} />);
 
     advance(100);
     unmount();
@@ -151,9 +139,7 @@ describe("Toast display and exit lifecycle", () => {
 
   it("cancels a pending close when show becomes false during exit", () => {
     const onClose = vi.fn();
-    const { rerender } = render(
-      <Toast message="test" show={true} onClose={onClose} />,
-    );
+    const { rerender } = render(<Toast message="test" show={true} onClose={onClose} />);
 
     advance(3100);
     rerender(<Toast message="test" show={false} onClose={onClose} />);
@@ -164,9 +150,7 @@ describe("Toast display and exit lifecycle", () => {
 
   it("does not schedule a hidden toast but starts when it is shown", () => {
     const onClose = vi.fn();
-    const { rerender } = render(
-      <Toast message="test" show={false} onClose={onClose} />,
-    );
+    const { rerender } = render(<Toast message="test" show={false} onClose={onClose} />);
 
     advance(10000);
     expect(screen.getByText("test")).toHaveClass("opacity-0");
@@ -180,14 +164,10 @@ describe("Toast display and exit lifecycle", () => {
 
   it("restarts the display timer when the duration changes", () => {
     const onClose = vi.fn();
-    const { rerender } = render(
-      <Toast message="test" show={true} onClose={onClose} time={3000} />,
-    );
+    const { rerender } = render(<Toast message="test" show={true} onClose={onClose} time={3000} />);
 
     advance(1000);
-    rerender(
-      <Toast message="test" show={true} onClose={onClose} time={6000} />,
-    );
+    rerender(<Toast message="test" show={true} onClose={onClose} time={6000} />);
     advance(5999);
     expect(screen.getByText("test")).toHaveClass("opacity-100");
     expect(onClose).not.toHaveBeenCalled();
@@ -200,9 +180,7 @@ describe("Toast display and exit lifecycle", () => {
   it("cancels the old callback when only the callback changes during exit", () => {
     const onCloseA = vi.fn();
     const onCloseB = vi.fn();
-    const { rerender } = render(
-      <Toast message="test" show={true} onClose={onCloseA} />,
-    );
+    const { rerender } = render(<Toast message="test" show={true} onClose={onCloseA} />);
 
     advance(3100);
     rerender(<Toast message="test" show={true} onClose={onCloseB} />);
@@ -213,9 +191,7 @@ describe("Toast display and exit lifecycle", () => {
 
   it("does not postpone the deadline on an unchanged rerender", () => {
     const onClose = vi.fn();
-    const { rerender } = render(
-      <Toast message="test" show={true} onClose={onClose} />,
-    );
+    const { rerender } = render(<Toast message="test" show={true} onClose={onClose} />);
 
     advance(1500);
     expect(onClose).not.toHaveBeenCalled();
@@ -231,7 +207,7 @@ describe("Toast display and exit lifecycle", () => {
     render(
       <StrictMode>
         <Toast message="strict" show={true} onClose={onClose} />
-      </StrictMode>,
+      </StrictMode>
     );
 
     expect(vi.getTimerCount()).toBe(1);
@@ -244,9 +220,7 @@ describe("Toast display and exit lifecycle", () => {
 
   it("preserves the manual close callback", () => {
     const onClose = vi.fn();
-    const { unmount } = render(
-      <Toast message="manual" show={true} onClose={onClose} />,
-    );
+    const { unmount } = render(<Toast message="manual" show={true} onClose={onClose} />);
 
     fireEvent.click(screen.getByRole("button"));
     expect(onClose).toHaveBeenCalledTimes(1);
