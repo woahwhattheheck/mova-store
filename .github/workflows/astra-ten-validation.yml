@@ -1,0 +1,133 @@
+name: ASTRA TEN pinned validation
+on:
+  push:
+    branches: [ci/astra-ten-validation-20260907]
+permissions:
+  contents: read
+concurrency:
+  group: astra-ten-pinned-validation
+  cancel-in-progress: false
+jobs:
+  rust:
+    name: PR359 pinned Rust 1.91.0
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 89dccf8c36c47d1c38a662ff4a6eb25f61f39941
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.91.0
+          components: rustfmt, clippy
+          targets: wasm32v1-none
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            contracts/checkout/target/
+          key: ${{ runner.os }}-cargo-1.91.0-${{ hashFiles('contracts/checkout/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-1.91.0-
+      - name: Verify revision and Rust checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = 89dccf8c36c47d1c38a662ff4a6eb25f61f39941
+          mkdir -p "$GITHUB_WORKSPACE/evidence"
+          rustc --version | tee evidence/rust-version.txt
+          cargo --version | tee -a evidence/rust-version.txt
+          git ls-tree -r HEAD contracts/checkout > evidence/rust-source-manifest.txt
+          cd contracts/checkout
+          status=0
+          for check in fmt clippy test build; do
+            case "$check" in
+              fmt) args=(fmt -- --check);;
+              clippy) args=(clippy --locked --all-targets -- -D warnings);;
+              test) args=(test --locked);;
+              build) args=(build --locked --release --target wasm32v1-none);;
+            esac
+            set +e
+            cargo +1.91.0 "${args[@]}" 2>&1 | tee "$GITHUB_WORKSPACE/evidence/rust-$check.log"
+            code=${PIPESTATUS[0]}
+            set -e
+            printf '%s\t%s\n' "$check" "$code" | tee -a "$GITHUB_WORKSPACE/evidence/rust-status.tsv"
+            test "$code" = 0 || status=1
+          done
+          cd "$GITHUB_WORKSPACE"
+          git diff --exit-code
+          sha256sum evidence/* > evidence/SHA256SUMS
+          { echo '## PR359 pinned Rust 1.91.0'; echo '```'; cat evidence/rust-version.txt evidence/rust-status.tsv; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: astra-ten-rust359
+          path: evidence/
+          if-no-files-found: error
+  frontend:
+    name: PR365 and PR369 source-verified comparison
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: carrier
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: 65d9dfb09cbf544edbd0d6ac2954219427f734c7
+          path: baseline
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: 202127cb7d9b4c6764216ea63e200001dbceea63
+          path: pr365
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: 0d3864ed54f6be4cbf5dce4d56bc59894617cca2
+          path: pr369
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: baseline/package-lock.json
+      - name: Install exact shared lockfile
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmp baseline/package-lock.json pr365/package-lock.json
+          cmp baseline/package-lock.json pr369/package-lock.json
+          mkdir -p evidence
+          node --version | tee evidence/node-version.txt
+          npm --version | tee -a evidence/node-version.txt
+          npm ci --prefix baseline --ignore-scripts --no-audit --no-fund
+          ln -s ../baseline/node_modules pr365/node_modules
+          ln -s ../baseline/node_modules pr369/node_modules
+      - name: Collect native reports without hiding baseline failures
+        shell: bash
+        run: |
+          set -euo pipefail
+          for label in baseline pr365 pr369; do
+            cd "$GITHUB_WORKSPACE/$label"
+            set +e
+            npm test -- --maxWorkers=1 --minWorkers=1 --reporter=json --outputFile="$GITHUB_WORKSPACE/evidence/$label.json" > "$GITHUB_WORKSPACE/evidence/$label.log" 2>&1
+            code=$?
+            set -e
+            printf '%s\t%s\n' "$label" "$code" | tee -a "$GITHUB_WORKSPACE/evidence/frontend-status.tsv"
+            test "$code" -le 1
+            test -s "$GITHUB_WORKSPACE/evidence/$label.json"
+          done
+      - name: Verify tracked test paths and exact failure identities
+        run: python3 carrier/.github/astra_ten_verify.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: astra-ten-frontend365369
+          path: evidence/
+          if-no-files-found: error
