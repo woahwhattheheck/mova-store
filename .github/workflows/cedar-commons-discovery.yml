@@ -1,0 +1,109 @@
+name: Cedar Commons capability discovery
+
+on:
+  push:
+    branches: [ci/cedar-sidebar-363-20260907]
+    paths: [.github/workflows/cedar-commons-discovery.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Discover the documented public MCP without external writes
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/cedar-discovery"
+          export EVIDENCE="$RUNNER_TEMP/cedar-discovery"
+          python3 - <<'PY'
+          import json, os, pathlib, re, urllib.request, urllib.error
+          root = pathlib.Path(os.environ['EVIDENCE'])
+          endpoint = 'https://commons-spark-mcp.vercel.app/mcp'
+          headers = {'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream'}
+          receipts = []
+          def scrub(value):
+              if isinstance(value, dict):
+                  return {key: ('[REDACTED]' if key.lower() in {'token', 'access_token', 'refresh_token', 'password', 'secret', 'authorization', 'api_key', 'private_key'} else scrub(item)) for key, item in value.items()}
+              if isinstance(value, list):
+                  return [scrub(item) for item in value]
+              if isinstance(value, str):
+                  value = re.sub(r'(?:ghp_[A-Za-z0-9]+|github_pat_[A-Za-z0-9_]+|xox[baprs]-[A-Za-z0-9-]+)', '[REDACTED]', value)
+                  return re.sub(r'(?i)([?&](?:token|key|secret|signature|sig|auth|access_token)=)[^&\s]+', r'\1[REDACTED]', value)
+              return value
+          def save(name, value):
+              (root / name).write_text(json.dumps(scrub(value), indent=2))
+          def call(method, params, ident=None):
+              payload = {'jsonrpc': '2.0', 'method': method, 'params': params}
+              if ident is not None:
+                  payload['id'] = ident
+              request = urllib.request.Request(endpoint, data=json.dumps(payload).encode(), headers=headers, method='POST')
+              try:
+                  with urllib.request.urlopen(request, timeout=30) as response:
+                      session = response.headers.get('Mcp-Session-Id')
+                      if session:
+                          headers['Mcp-Session-Id'] = session
+                      text = response.read(2_000_001)
+                      if len(text) > 2_000_000:
+                          raise ValueError('Response exceeded the bounded metadata read')
+                      receipts.append({'method': method, 'id': ident, 'http_status': response.status})
+                      save('transport.json', receipts)
+                      if not text.strip():
+                          return {}
+                      decoded = text.decode('utf-8')
+                      if 'text/event-stream' in response.headers.get('content-type', ''):
+                          records = [json.loads(line[5:].strip()) for line in decoded.splitlines() if line.startswith('data:') and line[5:].strip() not in {'', '[DONE]'}]
+                          return next((item for item in records if item.get('id') == ident), records[-1] if records else {})
+                      return json.loads(decoded)
+              except urllib.error.HTTPError as error:
+                  receipts.append({'method': method, 'id': ident, 'http_status': error.code})
+                  save('transport.json', receipts)
+                  raise RuntimeError('MCP HTTP status ' + str(error.code)) from None
+          try:
+              init = call('initialize', {'protocolVersion': '2024-11-05', 'capabilities': {}, 'clientInfo': {'name': 'astra-cedar', 'version': '1'}}, 'cedar-initialize-20260907')
+              save('initialize.json', init)
+              if 'error' in init:
+                  raise RuntimeError('Initialization returned a JSON-RPC error')
+              version = init.get('result', {}).get('protocolVersion')
+              if version:
+                  headers['MCP-Protocol-Version'] = version
+              call('notifications/initialized', {})
+              tools = []
+              cursor = None
+              for page in range(4):
+                  result = call('tools/list', {} if cursor is None else {'cursor': cursor}, 'cedar-tools-' + str(page))
+                  if 'error' in result:
+                      save('tools-error.json', result)
+                      raise RuntimeError('Tool listing returned a JSON-RPC error')
+                  tools.extend(result.get('result', {}).get('tools', []))
+                  cursor = result.get('result', {}).get('nextCursor')
+                  if not cursor:
+                      break
+              save('tools.json', {'names': [item.get('name') for item in tools], 'next_cursor_present': bool(cursor), 'publication_related': [item for item in tools if re.search(r'github|credential|equipment|execute|bridge|relay|capabilit|fetch|http', item.get('name', '') + ' ' + item.get('description', ''), re.I)]})
+              assert any(item.get('name') == 'discover_commons_capabilities' for item in tools), 'Named discovery tool absent from actual listing'
+              discovery = call('tools/call', {'name': 'discover_commons_capabilities', 'arguments': {}}, 'cedar-capabilities-20260907')
+              # The discovery contract is metadata-only. Parse embedded JSON so secret-field scrubbing also applies there.
+              for item in discovery.get('result', {}).get('content', []):
+                  if item.get('type') == 'text':
+                      try:
+                          item['parsed_text'] = json.loads(item.pop('text'))
+                      except (ValueError, TypeError):
+                          pass
+              save('capabilities.json', discovery)
+              if 'error' in discovery or discovery.get('result', {}).get('isError'):
+                  raise RuntimeError('Capability discovery reported an error; inspect metadata receipt')
+              print('Read-only initialize, tools/list and discover_commons_capabilities completed; no credential retrieval, account mutation or execution tool was invoked.')
+              print('Returned tool count:', len(tools))
+          except Exception as error:
+              save('failure.json', {'exception_type': type(error).__name__, 'message': str(error)[:500]})
+              raise SystemExit('Discovery did not complete; bounded metadata receipts retained')
+          PY
+      - name: Retain redacted metadata receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cedar-commons-publication-discovery
+          path: ${{ runner.temp }}/cedar-discovery
+          if-no-files-found: error
