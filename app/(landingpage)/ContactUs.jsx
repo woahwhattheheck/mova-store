@@ -176,15 +176,6 @@ const ContactUs = () => {
                   "Send Message"
                 )}
               </button>
-              {error && (
-                <p
-                  role="alert"
-                  aria-live="polite"
-                  className="mt-4 text-center text-sm font-medium text-red-600"
-                >
-                  {error}
-                </p>
-              )}
             </form>
           </div>
         </div>
