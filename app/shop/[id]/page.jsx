@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, use } from "react";
 import Image from "next/image";
 import { FaShoppingCart } from "react-icons/fa";
 import { useCart } from "../../../context/CartContext";
@@ -10,7 +10,8 @@ import useToast from "../../../hooks/useToast";
 import { getProductById } from "../../../lib/products";
 import LoadingSpinner from "../../../components/LoadingSpinner";
 
-const ProductPage = ({ params }) => {
+const ProductPage = (props) => {
+  const params = use(props.params);
   const { itemCount, cartItems, addToCart, removeFromCart, totalPrice } = useCart();
   const { toast, showToast, hideToast } = useToast(3000);
   const [product, setProduct] = useState(null);

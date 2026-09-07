@@ -28,6 +28,8 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "html"],
+      // Vitest 4 otherwise omits source files that tests never import.
+      include: ["{app,components,context,hooks,lib}/**/*.{js,jsx,ts,tsx}"],
       thresholds: {
         lines: 4,
         statements: 4,

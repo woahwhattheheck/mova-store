@@ -1,6 +1,6 @@
-import React from "react";
+import React, { Suspense } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import Products from "../../app/shop/page";
 import ProductPage from "../../app/shop/[id]/page";
 import { CartProvider } from "../../context/CartContext";
@@ -14,7 +14,7 @@ const product = { id: "duplicate", name: "Test shoe", price: 25, img: "/shoe.png
 
 describe.each([
   ["shop", () => <Products />],
-  ["product detail", () => <ProductPage params={{ id: product.id }} />],
+  ["product detail", () => <ProductPage params={Promise.resolve({ id: product.id })} />],
 ])("%s cart row identity", (_name, page) => {
   let errors;
 
@@ -38,7 +38,13 @@ describe.each([
   });
 
   it.each([0, 1])("preserves the surviving DOM row when removing duplicate %i", async (index) => {
-    render(<CartProvider>{page()}</CartProvider>);
+    await act(async () => {
+      render(
+        <CartProvider>
+          <Suspense fallback={<p>Loading product route</p>}>{page()}</Suspense>
+        </CartProvider>
+      );
+    });
     if (_name === "product detail") {
       await screen.findByText("Error: Product not found");
     } else {

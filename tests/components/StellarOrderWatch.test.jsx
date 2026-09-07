@@ -14,10 +14,12 @@ const mockStop = vi.fn();
 
 vi.mock("../../lib/stellar/indexer", () => {
   return {
-    PaymentEventIndexer: vi.fn().mockImplementation(() => ({
-      start: mockStart,
-      stop: mockStop,
-    })),
+    PaymentEventIndexer: vi.fn().mockImplementation(function () {
+      return {
+        start: mockStart,
+        stop: mockStop,
+      };
+    }),
   };
 });
 
