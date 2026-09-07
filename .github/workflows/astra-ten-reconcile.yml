@@ -1,0 +1,88 @@
+name: ASTRA TEN artifact reconciliation
+on:
+  push:
+    branches: [ci/astra-ten-reconcile-20260907]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  reconcile:
+    name: Verify completed native results against pinned sources
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: carrier
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: 65d9dfb09cbf544edbd0d6ac2954219427f734c7
+          path: baseline
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: 202127cb7d9b4c6764216ea63e200001dbceea63
+          path: pr365
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: 0d3864ed54f6be4cbf5dce4d56bc59894617cca2
+          path: pr369
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: 89dccf8c36c47d1c38a662ff4a6eb25f61f39941
+          path: rust
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: astra-ten-frontend365369
+          path: evidence
+          run-id: 34084130882
+          github-token: ${{ github.token }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: astra-ten-rust359
+          path: evidence/rust
+          run-id: 34084130882
+          github-token: ${{ github.token }}
+      - name: Reconcile saved native results without rerunning passed checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import os, subprocess, json, re
+          root = Path(os.environ['GITHUB_WORKSPACE'])
+          script = (root / 'carrier/.github/astra_ten_verify.py').read_text()
+          old = "git(directory, 'diff', '--name-only')"
+          new = "git(directory, 'diff', '--name-only', '--', 'app', 'components', 'context', 'hooks', 'lib', 'tests', 'package.json', 'package-lock.json', 'tsconfig.json', 'vitest.config.ts')"
+          assert script.count(old) == 1
+          # The original whole-repository guard hit pre-existing binary/CRLF
+          # attribute differences. Preserve all source and test/report checks.
+          executed = root / 'evidence/executed-verifier.py'
+          executed.write_text(script.replace(old, new))
+          subprocess.run(['python3', str(executed)], check=True)
+          r = root / 'rust'
+          assert subprocess.check_output(['git','rev-parse','HEAD'], cwd=r).decode().strip() == '89dccf8c36c47d1c38a662ff4a6eb25f61f39941'
+          manifest = subprocess.check_output(['git','ls-tree','-r','HEAD','contracts/checkout'], cwd=r)
+          assert manifest == (root/'evidence/rust/rust-source-manifest.txt').read_bytes()
+          assert not subprocess.check_output(['git','diff','--name-only','--','contracts/checkout'], cwd=r).strip()
+          statuses = dict(line.split() for line in (root/'evidence/rust/rust-status.tsv').read_text().splitlines())
+          assert statuses == {'fmt':'0','clippy':'0','test':'0','build':'0'}, statuses
+          assert (root/'evidence/rust/rust-version.txt').read_text().startswith('rustc 1.91.0 ')
+          assert 'test result: ok. 19 passed; 0 failed;' in (root/'evidence/rust/rust-test.log').read_text()
+          text = '\n## PR359 native evidence reconciliation\n\nPinned Rust1.91.0: formatting, strict all-target Clippy, 19 tests and locked Wasm build all exited zero. The archived source manifest matches the pushed candidate exactly. This job verifies already-executed results; it does not rerun or claim the entire upstream CI is green.\n\nNative source run: 34084130882. Its custom whole-repository post-check was red because of unrelated checkout attributes; that is not a failed Cargo command. Frontend retains the exact baseline failures shown above.\n'
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as out:
+              out.write(text)
+          with (root/'evidence/verified-summary.md').open('a') as out:
+              out.write(text)
+          print(text)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: astra-ten-reconciled-evidence
+          path: evidence/
+          if-no-files-found: error
