@@ -1,0 +1,52 @@
+name: LATTICE-ETA Toast lifecycle regression
+
+on:
+  push:
+    branches:
+      - review/lattice-eta-toast-20260906
+    paths:
+      - review-tests/toast_lifecycle_replay.py
+      - .github/workflows/lattice-eta-toast.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lattice-eta-toast-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  toast-lifecycle:
+    if: github.repository == 'woahwhattheheck/mova-store'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    env:
+      CI: 'true'
+      NEXT_TELEMETRY_DISABLED: '1'
+    steps:
+      - name: Checkout isolated review branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Use Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install the existing lockfile
+        run: |
+          mkdir -p "$RUNNER_TEMP/lattice-toast"
+          set -o pipefail
+          npm ci 2>&1 | tee "$RUNNER_TEMP/lattice-toast/npm-ci.log"
+      - name: Replay original and candidate with the same native regressions
+        run: python3 review-tests/toast_lifecycle_replay.py --output "$RUNNER_TEMP/lattice-toast"
+      - name: Preserve outcomes, source, patch and raw diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: lattice-eta-toast-lifecycle
+          path: ${{ runner.temp }}/lattice-toast/
+          if-no-files-found: error
+          retention-days: 30
