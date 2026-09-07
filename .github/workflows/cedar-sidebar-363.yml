@@ -8,93 +8,106 @@ on:
 permissions:
   contents: read
 
+env:
+  NEXT_TELEMETRY_DISABLED: '1'
+
 jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - name: Checkout exact submitted source
+      - name: Checkout exact test candidate
         uses: actions/checkout@v4
         with:
-          ref: e6057f5f73ddfe85351cd4acfa75e9de6f12e70f
+          ref: ac4e1ee6a14bb0f2633ec68d7af15d849e4ff94b
           fetch-depth: 0
           persist-credentials: false
       - name: Setup repository CI Node major
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '20.20.2'
           cache: npm
       - name: Install unchanged locked dependencies
         run: npm ci --ignore-scripts --no-audit --no-fund
-      - name: Verify source identity and focused behavior
+      - name: Verify candidate and independent attribute controls
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/cedar-evidence"
           export EVIDENCE="$RUNNER_TEMP/cedar-evidence"
-          test "$(git rev-parse HEAD)" = e6057f5f73ddfe85351cd4acfa75e9de6f12e70f
-          {
-            git rev-parse HEAD
-            node --version
-            npm --version
-            git ls-files -s components/Sidebar.jsx tests/components/Sidebar.test.tsx package-lock.json
-            npm ls --depth=0
-          } > "$EVIDENCE/identity.txt" 2>&1
-          set +e
-          npm test -- tests/components/Sidebar.test.tsx --maxWorkers=1 --minWorkers=1 --reporter=verbose --reporter=json --outputFile="$EVIDENCE/head.json" > "$EVIDENCE/head.log" 2>&1
-          test_code=$?
-          npm run lint -- --file components/Sidebar.jsx --file tests/components/Sidebar.test.tsx > "$EVIDENCE/lint.log" 2>&1
-          lint_code=$?
-          ./node_modules/.bin/prettier --check components/Sidebar.jsx tests/components/Sidebar.test.tsx > "$EVIDENCE/format.log" 2>&1
-          format_code=$?
-          npm run type-check -- --incremental false > "$EVIDENCE/head-typecheck.log" 2>&1
-          type_code=$?
-          set -e
-          printf 'head_tests=%s\nfocused_lint=%s\nfocused_format=%s\nhead_typecheck=%s\n' "$test_code" "$lint_code" "$format_code" "$type_code" | tee "$EVIDENCE/exit-codes.txt"
-          cat "$EVIDENCE/head.log" "$EVIDENCE/lint.log" "$EVIDENCE/format.log" "$EVIDENCE/head-typecheck.log"
-          cp components/Sidebar.jsx "$EVIDENCE/Sidebar.jsx"
-          cp tests/components/Sidebar.test.tsx "$EVIDENCE/Sidebar.test.tsx"
-          git diff --exit-code -- components/Sidebar.jsx tests/components/Sidebar.test.tsx package.json package-lock.json
-          git show 65d9dfb09cbf544edbd0d6ac2954219427f734c7:components/Sidebar.jsx > components/Sidebar.jsx
-          set +e
-          npm test -- tests/components/Sidebar.test.tsx --maxWorkers=1 --minWorkers=1 --reporter=verbose --reporter=json --outputFile="$EVIDENCE/baseline-source-control.json" > "$EVIDENCE/baseline-source-control.log" 2>&1
-          control_code=$?
-          set -e
-          git restore --source=HEAD -- components/Sidebar.jsx
-          echo "baseline_source_control=$control_code" | tee -a "$EVIDENCE/exit-codes.txt"
-          cat "$EVIDENCE/baseline-source-control.log"
-          git worktree add --detach "$RUNNER_TEMP/cedar-baseline" 65d9dfb09cbf544edbd0d6ac2954219427f734c7
-          ln -s "$GITHUB_WORKSPACE/node_modules" "$RUNNER_TEMP/cedar-baseline/node_modules"
-          set +e
-          (cd "$RUNNER_TEMP/cedar-baseline" && npm run type-check -- --incremental false) > "$EVIDENCE/base-typecheck.log" 2>&1
-          base_type_code=$?
-          set -e
-          echo "base_typecheck=$base_type_code" | tee -a "$EVIDENCE/exit-codes.txt"
-          cat "$EVIDENCE/base-typecheck.log"
-          diff -u "$EVIDENCE/base-typecheck.log" "$EVIDENCE/head-typecheck.log" | tee "$EVIDENCE/typecheck-diff.txt"
-          ./node_modules/.bin/prettier --write components/Sidebar.jsx tests/components/Sidebar.test.tsx > "$EVIDENCE/format-write.log" 2>&1
-          git diff -- components/Sidebar.jsx tests/components/Sidebar.test.tsx > "$EVIDENCE/format-only.patch"
-          cat "$EVIDENCE/format-only.patch"
-          git restore --source=HEAD -- components/Sidebar.jsx tests/components/Sidebar.test.tsx
+          mkdir -p "$EVIDENCE"
           python3 - <<'PY'
-          import json, os, pathlib
-          d = pathlib.Path(os.environ['EVIDENCE'])
-          head = json.loads((d / 'head.json').read_text())
-          old = json.loads((d / 'baseline-source-control.json').read_text())
-          assert head['numPassedTests'] == 6 and head['numFailedTests'] == 0, head
-          assert old['numPassedTests'] == 4 and old['numFailedTests'] == 2, old
-          assert {t['fullName'] for s in head['testResults'] for t in s['assertionResults']} == {t['fullName'] for s in old['testResults'] for t in s['assertionResults']}
-          print('Six current-head tests pass; both route/label regressions reject original production source; four unchanged behaviors retained.')
+          import hashlib, json, os, pathlib, re, subprocess
+          out = pathlib.Path(os.environ['EVIDENCE'])
+          source = pathlib.Path('components/Sidebar.jsx')
+          tests = pathlib.Path('tests/components/Sidebar.test.tsx')
+          production = source.read_bytes()
+          candidate = tests.read_bytes()
+          old_tests = subprocess.check_output(['git', 'show', 'e6057f5f73ddfe85351cd4acfa75e9de6f12e70f:tests/components/Sidebar.test.tsx'])
+          def blob(data):
+              return hashlib.sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest()
+          assert blob(production) == '9333f8e7a6da3a8eb54b05b7ab6f8ba32e36d376'
+          assert blob(candidate) == '5af2d364a3cd9f7b3d9a2a36ed756904eb04f0eb'
+          assert blob(old_tests) == 'ee2d53ef909846707efafcbc9c00bdc8693d0e00'
+          assert blob(pathlib.Path('package-lock.json').read_bytes()) == 'b6eb76c7e6862c9ff18ed421ebe1dd16f7b9c1a0'
+          (out / 'Sidebar.jsx').write_bytes(production)
+          (out / 'Sidebar.test.tsx').write_bytes(candidate)
+          (out / 'original-Sidebar.test.tsx').write_bytes(old_tests)
+          identity = subprocess.check_output(['git', 'rev-parse', 'HEAD']).decode()
+          identity += subprocess.check_output(['node', '--version']).decode()
+          identity += subprocess.check_output(['npm', '--version']).decode()
+          identity += subprocess.check_output(['git', 'ls-files', '-s', str(source), str(tests), 'package-lock.json']).decode()
+          (out / 'identity.txt').write_text(identity)
+          summary = {}
+          def execute(name, command):
+              with (out / (name + '.log')).open('w') as log:
+                  code = subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, timeout=180).returncode
+              return code
+          def run_suite(name, implementation, suite, passes, failures):
+              source.write_bytes(implementation)
+              tests.write_bytes(suite)
+              code = execute(name, ['npm', 'test', '--', str(tests), '--maxWorkers=1', '--minWorkers=1', '--reporter=json', '--outputFile=' + str(out / (name + '.json'))])
+              report = json.loads((out / (name + '.json')).read_text())
+              cases = [case for item in report['testResults'] for case in item['assertionResults']]
+              actual = {'passed': report['numPassedTests'], 'failed': report['numFailedTests'], 'exit': code,
+                        'failed_names': [case['fullName'] for case in cases if case['status'] == 'failed']}
+              summary[name] = actual
+              (out / 'summary.json').write_text(json.dumps(summary, indent=2))
+              print(name, json.dumps(actual), flush=True)
+              assert actual['passed'] == passes and actual['failed'] == failures, actual
+              assert code == (1 if failures else 0), actual
+              return {case['fullName'] for case in cases}
+          try:
+              candidate_names = run_suite('candidate', production, candidate, 8, 0)
+              for attribute in ('title', 'aria-label'):
+                  mutated, count = re.subn(rb'(?m)^[ \t]+' + attribute.encode() + rb'="(?:Home|Shop|Collections|Admin)"\n', b'', production)
+                  assert count == 4, count
+                  old_names = run_suite('old-tests-without-' + attribute, mutated, old_tests, 6, 0)
+                  new_names = run_suite('new-tests-without-' + attribute, mutated, candidate, 6, 2)
+                  assert old_names < candidate_names and new_names == candidate_names
+                  assert all('keeps mobile labels and tooltips aligned' in name for name in summary['new-tests-without-' + attribute]['failed_names'])
+              admin_only, count = re.subn(rb'(?m)^[ \t]+title="Admin"\n', b'', production)
+              assert count == 1
+              run_suite('new-tests-without-admin-title', admin_only, candidate, 7, 1)
+              assert 'isAdmin=true' in summary['new-tests-without-admin-title']['failed_names'][0]
+          finally:
+              source.write_bytes(production)
+              tests.write_bytes(candidate)
+          for name, command in (
+              ('focused-lint', ['npm', 'run', 'lint', '--', '--file', str(source), '--file', str(tests)]),
+              ('focused-format', ['./node_modules/.bin/prettier', '--check', str(source), str(tests)]),
+          ):
+              code = execute(name, command)
+              summary[name] = {'exit': code}
+              (out / 'summary.json').write_text(json.dumps(summary, indent=2))
+              print(name, code, flush=True)
+              assert code == 0, (out / (name + '.log')).read_text()
+          subprocess.run(['git', 'diff', '--exit-code', '--', str(source), str(tests), 'package.json', 'package-lock.json'], check=True)
+          print('Candidate: 8/8; original six identities preserved; both independent attribute gaps measured; admin-only control discriminates guest/admin.')
           PY
-          test "$test_code" -eq 0
-          test "$lint_code" -eq 0
-          test "$control_code" -ne 0
-          test "$type_code" -eq "$base_type_code"
-          test "$format_code" -eq 0
       - name: Preserve exact results even on a failed check
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: cedar-sidebar-363-e6057f5-evidence
+          name: cedar-sidebar-363-mobile-coverage-evidence
           path: ${{ runner.temp }}/cedar-evidence
           if-no-files-found: error
