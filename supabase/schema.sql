@@ -11,15 +11,19 @@ create table if not exists public.products (
   updated_at timestamptz not null default now()
 );
 
+-- Upgrade existing catalogs created before updated_at was introduced.
+alter table public.products
+  add column if not exists updated_at timestamptz not null default now();
+
 create index if not exists products_created_at_idx on public.products (created_at desc);
 
 create or replace function public.handle_updated_at()
-returns trigger as \$\$
+returns trigger as $$
 begin
   new.updated_at = now();
   return new;
 end;
-\$\$ language plpgsql;
+$$ language plpgsql;
 
 drop trigger if exists products_updated_at_trigger on public.products;
 create trigger products_updated_at_trigger
