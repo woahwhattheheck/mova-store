@@ -107,17 +107,24 @@ create index if not exists orders_created_at_idx on public.orders (created_at de
 
 alter table public.orders enable row level security;
 
--- Users can view their own orders; admins can view all orders
+-- Signed-in users can only read rows bound to their immutable auth user id.
 drop policy if exists "Users can read own orders" on public.orders;
 create policy "Users can read own orders"
   on public.orders for select
   to authenticated
-  using (auth.uid() = user_id or auth.email() = user_email);
+  using (auth.uid() = user_id);
 
--- Authenticated users or guest checkout can create order records
+-- Signed-in buyers can create only their own order rows. Guest checkout remains
+-- device-local and receives no anonymous database insert policy.
 drop policy if exists "Users can insert orders" on public.orders;
 create policy "Users can insert orders"
   on public.orders for insert
-  to authenticated, anon
-  with check (true);
+  to authenticated
+  with check (
+    auth.uid() = user_id
+    and (
+      user_email is null
+      or lower(auth.email()) = lower(user_email)
+    )
+  );
 
