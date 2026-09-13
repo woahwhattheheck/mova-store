@@ -35,17 +35,45 @@ export interface BuyerOrder {
 const STORAGE_KEY = "mova_buyer_orders";
 
 /**
- * Saves an order to Supabase and syncs to local storage cache.
+ * Saves an order to the local cache and, when signed in, persists it to Supabase.
+ * The active Supabase session is authoritative for ownership. Guest orders remain
+ * device-local and never attempt a remote insert.
  */
 export async function saveBuyerOrder(order: BuyerOrder): Promise<BuyerOrder> {
-  // 1. Cache to localStorage
+  let sessionUser: { id: string; email?: string | null } | null = null;
+
+  try {
+    const { data, error } = await supabase.auth.getSession();
+    if (error) {
+      throw new Error(error.message);
+    }
+    sessionUser = data?.session?.user || null;
+  } catch (err) {
+    // Session lookup failures must not lose the local order. Treat the write as
+    // guest-local rather than trusting caller-supplied identity fields.
+    console.warn("Could not resolve Supabase session; keeping order device-local:", err);
+  }
+
+  const cachedOrder: BuyerOrder = sessionUser
+    ? {
+        ...order,
+        userId: sessionUser.id,
+        userEmail: sessionUser.email || undefined,
+      }
+    : {
+        ...order,
+        userId: undefined,
+        userEmail: undefined,
+      };
+
+  // 1. Cache locally using only session-derived ownership.
   try {
     const cached = getCachedBuyerOrders();
-    const existingIndex = cached.findIndex((o) => o.orderId === order.orderId);
+    const existingIndex = cached.findIndex((o) => o.orderId === cachedOrder.orderId);
     if (existingIndex >= 0) {
-      cached[existingIndex] = order;
+      cached[existingIndex] = cachedOrder;
     } else {
-      cached.unshift(order);
+      cached.unshift(cachedOrder);
     }
     if (typeof window !== "undefined") {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(cached));
@@ -54,15 +82,16 @@ export async function saveBuyerOrder(order: BuyerOrder): Promise<BuyerOrder> {
     console.warn("Failed to cache order to localStorage:", err);
   }
 
-  // 2. Try persisting to Supabase if table exists
-  try {
-    if (supabase) {
-      await supabase.from("orders").insert([
+  // 2. Signed-in orders may persist remotely. Guest checkout is device-local.
+  if (sessionUser) {
+    try {
+      const { error } = await supabase.from("orders").insert([
         {
-          id: order.id,
+          // Let Postgres generate the row UUID. order.id is an app/cache ID and
+          // is not guaranteed to be a valid UUID.
           order_id: order.orderId,
-          user_id: order.userId || null,
-          user_email: order.userEmail || null,
+          user_id: sessionUser.id,
+          user_email: sessionUser.email || null,
           total: order.total,
           status: order.status,
           payment_method: order.paymentMethod,
@@ -73,13 +102,18 @@ export async function saveBuyerOrder(order: BuyerOrder): Promise<BuyerOrder> {
           created_at: order.createdAt,
         },
       ]);
+
+      if (error) {
+        throw new Error(error.message);
+      }
+    } catch (err) {
+      // Supabase may be unavailable in dev/offline; the local cache above keeps
+      // the order accessible without weakening the database ownership boundary.
+      console.warn("Could not insert order into Supabase, kept in local cache:", err);
     }
-  } catch (err) {
-    // Supabase table may not exist yet in dev or offline; local cache ensures continuity
-    console.warn("Could not insert order into Supabase, kept in local cache:", err);
   }
 
-  return order;
+  return cachedOrder;
 }
 
 /**
@@ -98,12 +132,14 @@ export function getCachedBuyerOrders(): BuyerOrder[] {
 }
 
 /**
- * Fetches past orders for an authenticated user.
+ * Fetches past orders for an authenticated user, or device-local guest orders
+ * when no user identity is supplied.
  */
 export async function fetchBuyerOrders(userEmailOrId?: string): Promise<BuyerOrder[]> {
   let orders: BuyerOrder[] = [];
 
-  // Try querying Supabase first
+  // Try querying Supabase first for signed-in users. RLS remains the authority;
+  // the explicit filter only narrows the caller's own rows.
   try {
     if (supabase && userEmailOrId) {
       const isEmail = userEmailOrId.includes("@");
@@ -115,6 +151,10 @@ export async function fetchBuyerOrders(userEmailOrId?: string): Promise<BuyerOrd
       const res = isEmail
         ? await query.eq("user_email", userEmailOrId)
         : await query.eq("user_id", userEmailOrId);
+
+      if (res.error) {
+        throw new Error(res.error.message);
+      }
 
       if (res.data && Array.isArray(res.data) && res.data.length > 0) {
         orders = res.data.map((row: any) => ({
@@ -138,19 +178,20 @@ export async function fetchBuyerOrders(userEmailOrId?: string): Promise<BuyerOrd
     console.warn("Supabase query failed, falling back to cached orders:", err);
   }
 
-  // Fallback to localStorage cached orders
+  // Fallback to localStorage without crossing identity boundaries. Signed-in
+  // users only see explicitly matching cached ownership; guests only see rows
+  // with no signed-in owner attached.
   if (orders.length === 0) {
     const cached = getCachedBuyerOrders();
     if (userEmailOrId) {
+      const normalized = userEmailOrId.toLowerCase();
       orders = cached.filter(
         (o) =>
-          !o.userEmail ||
-          !o.userId ||
-          o.userEmail === userEmailOrId ||
-          o.userId === userEmailOrId
+          (Boolean(o.userId) && o.userId === userEmailOrId) ||
+          (Boolean(o.userEmail) && o.userEmail?.toLowerCase() === normalized)
       );
     } else {
-      orders = cached;
+      orders = cached.filter((o) => !o.userId && !o.userEmail);
     }
   }
 
