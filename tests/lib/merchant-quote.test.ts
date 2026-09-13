@@ -5,6 +5,7 @@ import {
   decimalToRawUnits,
   deriveMerchantQuote,
   normalizeCartLines,
+  quoteCommitmentPayload,
 } from "../../lib/checkout/merchant-quote";
 
 const buyer = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
@@ -16,7 +17,8 @@ function quote(overrides: Partial<Parameters<typeof deriveMerchantQuote>[0]> = {
     products: [{ id: 1, name: "Canonical item", price: "12.50" }],
     buyer,
     tokenContractId: token,
-    orderId: "MQ-test",
+    orderId: `MQ-${"a".repeat(64)}`,
+    quoteNonce: "nonce-test",
     nowSeconds: 1_000,
     ...overrides,
   });
@@ -81,7 +83,8 @@ describe("merchant-authoritative quote derivation", () => {
         products: [{ id: 1, price: "12.50" }],
         buyer,
         tokenContractId: token,
-        orderId: "MQ-unknown",
+        orderId: `MQ-${"b".repeat(64)}`,
+        quoteNonce: "nonce-unknown",
         nowSeconds: 1_000,
       })
     ).toThrow(/unknown productId/);
@@ -101,5 +104,56 @@ describe("merchant-authoritative quote derivation", () => {
     expect(() => assertFreshQuote(result, 1_059)).not.toThrow();
     expect(() => assertFreshQuote(result, 1_060)).toThrow(/expired/);
     expect(() => assertFreshQuote(result, 5_000)).toThrow(/expired/);
+  });
+
+  it("commits the canonical line set independent of request ordering", () => {
+    const left = deriveMerchantQuote({
+      lines: [
+        { productId: 2, quantity: 1 },
+        { productId: 1, quantity: 2 },
+      ],
+      products: [
+        { id: 1, price: "12.50" },
+        { id: 2, price: "3.00" },
+      ],
+      buyer,
+      tokenContractId: token,
+      orderId: `MQ-${"c".repeat(64)}`,
+      quoteNonce: "same-nonce",
+      nowSeconds: 1_000,
+    });
+    const right = deriveMerchantQuote({
+      lines: [
+        { productId: 1, quantity: 2 },
+        { productId: 2, quantity: 1 },
+      ],
+      products: [
+        { id: 2, price: "3.00" },
+        { id: 1, price: "12.50" },
+      ],
+      buyer,
+      tokenContractId: token,
+      orderId: `MQ-${"d".repeat(64)}`,
+      quoteNonce: "same-nonce",
+      nowSeconds: 1_000,
+    });
+
+    const { orderId: _leftId, ...leftFields } = left;
+    const { orderId: _rightId, ...rightFields } = right;
+    expect(quoteCommitmentPayload(leftFields)).toBe(quoteCommitmentPayload(rightFields));
+  });
+
+  it("changes the commitment when a line quantity changes", () => {
+    const original = quote();
+    const changed = quote({
+      lines: [{ productId: 1, quantity: 3 }],
+      quoteNonce: original.quoteNonce,
+    });
+    const { orderId: _originalId, ...originalFields } = original;
+    const { orderId: _changedId, ...changedFields } = changed;
+
+    expect(quoteCommitmentPayload(originalFields)).not.toBe(
+      quoteCommitmentPayload(changedFields)
+    );
   });
 });

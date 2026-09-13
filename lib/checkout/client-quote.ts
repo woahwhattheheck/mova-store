@@ -64,8 +64,11 @@ function parseQuoteResponse(
   if (!value || typeof value !== "object") throw new Error("quote response is malformed");
   const quote = value as Partial<MerchantQuote>;
 
-  if (typeof quote.orderId !== "string" || !quote.orderId.startsWith("MQ-")) {
-    throw new Error("quote response has an invalid order id");
+  if (typeof quote.orderId !== "string" || !/^MQ-[0-9a-f]{64}$/.test(quote.orderId)) {
+    throw new Error("quote response has an invalid committed order id");
+  }
+  if (typeof quote.quoteNonce !== "string" || !quote.quoteNonce.trim()) {
+    throw new Error("quote response is missing its commitment nonce");
   }
   if (quote.buyer !== expected.buyer) throw new Error("quote buyer does not match wallet");
   if (quote.tokenContractId !== expected.tokenContractId) {
@@ -77,7 +80,12 @@ function parseQuoteResponse(
   if (typeof quote.amountUsd !== "string" || !/^\d+(?:\.\d+)?$/.test(quote.amountUsd)) {
     throw new Error("quote display amount is invalid");
   }
-  if (!Number.isSafeInteger(quote.issuedAt) || !Number.isSafeInteger(quote.expiresAt)) {
+  if (
+    typeof quote.issuedAt !== "number" ||
+    typeof quote.expiresAt !== "number" ||
+    !Number.isSafeInteger(quote.issuedAt) ||
+    !Number.isSafeInteger(quote.expiresAt)
+  ) {
     throw new Error("quote timestamps are invalid");
   }
   if (!Array.isArray(quote.lines) || quote.lines.length === 0) {

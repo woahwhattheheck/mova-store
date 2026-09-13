@@ -3,6 +3,7 @@ export const DEFAULT_QUOTE_TTL_SECONDS = 10 * 60;
 export const MAX_QUOTE_TTL_SECONDS = 30 * 60;
 export const MAX_CART_LINES = 50;
 export const MAX_LINE_QUANTITY = 100;
+export const QUOTE_COMMITMENT_VERSION = 1;
 
 export type ProductId = string | number;
 
@@ -26,6 +27,7 @@ export interface QuotedLine {
 
 export interface MerchantQuote {
   orderId: string;
+  quoteNonce: string;
   buyer: string;
   tokenContractId: string;
   amountRaw: string;
@@ -134,6 +136,7 @@ export function deriveMerchantQuote(input: {
   buyer: string;
   tokenContractId: string;
   orderId: string;
+  quoteNonce: string;
   nowSeconds: number;
   ttlSeconds?: number;
   decimals?: number;
@@ -144,6 +147,7 @@ export function deriveMerchantQuote(input: {
   if (!input.buyer.trim()) throw new Error("buyer is required");
   if (!input.tokenContractId.trim()) throw new Error("tokenContractId is required");
   if (!input.orderId.trim()) throw new Error("orderId is required");
+  if (!input.quoteNonce.trim()) throw new Error("quoteNonce is required");
   if (!Number.isSafeInteger(input.nowSeconds) || input.nowSeconds < 0) {
     throw new Error("nowSeconds must be a non-negative integer");
   }
@@ -177,10 +181,14 @@ export function deriveMerchantQuote(input: {
     };
   });
 
+  // The quote identity commits a canonical order-independent line set.
+  quotedLines.sort((a, b) => productKey(a.productId).localeCompare(productKey(b.productId)));
+
   if (amountRaw <= BigInt(0)) throw new Error("quote amount must be positive");
 
   return {
     orderId: input.orderId,
+    quoteNonce: input.quoteNonce,
     buyer: input.buyer,
     tokenContractId: input.tokenContractId,
     amountRaw: amountRaw.toString(),
@@ -189,6 +197,36 @@ export function deriveMerchantQuote(input: {
     expiresAt: input.nowSeconds + ttlSeconds,
     lines: quotedLines,
   };
+}
+
+/**
+ * Canonical preimage for the quote/order commitment. The server hashes this
+ * exact string with SHA-256 and uses `MQ-<hex>` as the human order id; that
+ * order id is then hashed again into the contract BytesN<32> key. Because the
+ * merchant authorizes that on-chain key, the paid order also commits to the
+ * canonical line identities and quantities without storing a new large struct
+ * in Soroban persistent storage.
+ */
+export function quoteCommitmentPayload(
+  quote: Omit<MerchantQuote, "orderId">
+): string {
+  return JSON.stringify({
+    version: QUOTE_COMMITMENT_VERSION,
+    quoteNonce: quote.quoteNonce,
+    buyer: quote.buyer,
+    tokenContractId: quote.tokenContractId,
+    amountRaw: quote.amountRaw,
+    issuedAt: quote.issuedAt,
+    expiresAt: quote.expiresAt,
+    lines: [...quote.lines]
+      .sort((a, b) => productKey(a.productId).localeCompare(productKey(b.productId)))
+      .map((line) => ({
+        productId: productKey(line.productId),
+        quantity: line.quantity,
+        unitAmountRaw: line.unitAmountRaw,
+        lineAmountRaw: line.lineAmountRaw,
+      })),
+  });
 }
 
 export function assertFreshQuote(quote: MerchantQuote, nowSeconds: number): void {

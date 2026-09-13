@@ -7,6 +7,7 @@ import {
 
 const buyer = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
 const token = "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4";
+const orderId = `MQ-${"a".repeat(64)}`;
 
 function response(body: unknown, status = 201): Response {
   return new Response(JSON.stringify(body), {
@@ -17,7 +18,8 @@ function response(body: unknown, status = 201): Response {
 
 function validQuote() {
   return {
-    orderId: "MQ-123",
+    orderId,
+    quoteNonce: "quote-nonce",
     buyer,
     tokenContractId: token,
     amountRaw: "250000000",
@@ -74,6 +76,7 @@ describe("browser merchant-quote boundary", () => {
     });
 
     expect(quote.amountRaw).toBe("250000000");
+    expect(quote.orderId).toBe(orderId);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
@@ -121,6 +124,22 @@ describe("browser merchant-quote boundary", () => {
         nowSeconds: 1_600,
       })
     ).rejects.toThrow(/expired/);
+  });
+
+  it("rejects an uncommitted order id", async () => {
+    const fetchImpl = vi.fn(async () =>
+      response({ ...validQuote(), orderId: "MQ-not-a-digest" })
+    ) as unknown as typeof fetch;
+
+    await expect(
+      requestMerchantQuote({
+        cartItems: [{ id: 1 }],
+        buyer,
+        tokenContractId: token,
+        fetchImpl,
+        nowSeconds: 1_100,
+      })
+    ).rejects.toThrow(/committed order id/);
   });
 
   it("surfaces server-side quote rejection without using a browser fallback total", async () => {
