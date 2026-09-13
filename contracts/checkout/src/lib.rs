@@ -13,7 +13,8 @@ use crate::errors::Error;
 use crate::events::{OrderCreated, OrderRefunded, OrderShipped, PaymentReceived};
 use crate::order::{Order, Status};
 use crate::storage::{
-    get_admin, get_order, has_admin, is_token_allowed, set_admin, set_order, set_token_allowed,
+    get_admin, get_order, get_order_expiry, has_admin, is_token_allowed, set_admin, set_order,
+    set_order_expiry, set_token_allowed,
 };
 
 #[contract]
@@ -69,12 +70,17 @@ impl Checkout {
         is_token_allowed(&env, &token)
     }
 
-    /// Register a buyer's intent to fund an order. The buyer authorizes this.
+    /// Register a merchant-authorized pending quote/order.
     ///
-    /// * `buyer`    - the address that will pay.
-    /// * `order_id` - a unique 32-byte identifier for the order.
-    /// * `token`    - the SEP-41 token contract the buyer will pay with.
-    /// * `amount`   - the intended amount, in raw token units.
+    /// The merchant, not the buyer, authorizes the immutable payment terms.
+    /// A buyer cannot self-price an order by calling this entrypoint because
+    /// the configured merchant address must authorize every creation.
+    ///
+    /// * `buyer`      - the only address permitted to fund the quote.
+    /// * `order_id`   - unique 32-byte quote/order identifier.
+    /// * `token`      - exact SEP-41 token contract the merchant quoted.
+    /// * `amount`     - exact raw token amount the merchant quoted.
+    /// * `expires_at` - ledger timestamp after which payment is rejected.
     ///
     /// Emits `create_order`. No funds move until `pay` is called.
     pub fn create_order(
@@ -83,8 +89,10 @@ impl Checkout {
         order_id: BytesN<32>,
         token: Address,
         amount: i128,
+        expires_at: u64,
     ) -> Result<(), Error> {
-        buyer.require_auth();
+        let merchant = get_admin(&env)?;
+        merchant.require_auth();
 
         if amount <= 0 {
             return Err(Error::InvalidAmount);
@@ -97,6 +105,10 @@ impl Checkout {
         }
 
         let timestamp = env.ledger().timestamp();
+        if expires_at <= timestamp {
+            return Err(Error::InvalidExpiry);
+        }
+
         let order = Order {
             buyer: buyer.clone(),
             amount,
@@ -105,6 +117,7 @@ impl Checkout {
             status: Status::Pending,
         };
         set_order(&env, &order_id, &order);
+        set_order_expiry(&env, &order_id, expires_at);
 
         OrderCreated {
             token,
@@ -118,20 +131,18 @@ impl Checkout {
         Ok(())
     }
 
-    /// Pay for an order. The buyer authorizes the transfer.
+    /// Read the immutable expiry of a merchant-authorized pending quote/order.
+    /// Existing records from before quote enforcement have no expiry and are
+    /// therefore not payable through the strict `pay` path.
+    pub fn expires_at(env: Env, order_id: BytesN<32>) -> Option<u64> {
+        get_order_expiry(&env, &order_id)
+    }
+
+    /// Pay a merchant-authorized pending order. The buyer authorizes transfer.
     ///
-    /// * `token`    - the [SEP-41 token](https://stellar.org/developers/learn/guides/interoperability/sep-41)
-    ///                contract to pay with (whitelisted by the merchant).
-    /// * `buyer`    - the address paying for the order (must authorize the transfer).
-    /// * `order_id` - a unique 32-byte identifier for the order.
-    /// * `amount`   - the exact amount of `token` to escrow, in raw token units.
-    ///
-    /// Transfers `amount` from `buyer` into the **contract's escrow** and
-    /// records the order as `Paid`. Funds are released to the merchant by
-    /// calling `dispatch`, or returned to the buyer by calling `refund`.
-    ///
-    /// Emits `pay` (aliased `payment_received`). An order can only be paid
-    /// once; duplicate payments are rejected with `OrderAlreadyPaid`.
+    /// The supplied buyer, token and amount must exactly equal the immutable
+    /// pending quote. Missing, expired, mismatched and replayed orders fail
+    /// before any token transfer is attempted.
     pub fn pay(
         env: Env,
         token: Address,
@@ -139,50 +150,55 @@ impl Checkout {
         order_id: BytesN<32>,
         amount: i128,
     ) -> Result<(), Error> {
-        buyer.require_auth();
-
         if amount <= 0 {
             return Err(Error::InvalidAmount);
+        }
+
+        let order = get_order(&env, &order_id).ok_or(Error::OrderNotFound)?;
+        if order.status != Status::Pending {
+            return Err(Error::OrderAlreadyPaid);
+        }
+
+        let expires_at = get_order_expiry(&env, &order_id).ok_or(Error::OrderNotFound)?;
+        if env.ledger().timestamp() >= expires_at {
+            return Err(Error::QuoteExpired);
+        }
+
+        if order.buyer != buyer || order.token != token || order.amount != amount {
+            return Err(Error::QuoteMismatch);
         }
         if !is_token_allowed(&env, &token) {
             return Err(Error::TokenNotAllowed);
         }
 
+        buyer.require_auth();
         let merchant = get_admin(&env)?;
+        let token_client = TokenClient::new(&env, &order.token);
 
-        // A previous pay/refund cannot be superseded; a pending order can.
-        if let Some(existing) = get_order(&env, &order_id) {
-            if existing.status != Status::Pending {
-                return Err(Error::OrderAlreadyPaid);
-            }
-        }
-
-        let token_client = TokenClient::new(&env, &token);
-
-        // Escrow: buyer -> contract. The contract's own authorization on the
-        // transfer is derived from this invocation (it holds the funds).
+        // Escrow the exact merchant-quoted amount. The stored quote, not caller
+        // input, is the source of truth for the transfer and paid record.
         token_client.transfer(
-            &buyer,
+            &order.buyer,
             &MuxedAddress::from(&env.current_contract_address()),
-            &amount,
+            &order.amount,
         );
 
-        // Record the order as Paid, reflecting the actual payment.
-        let order = Order {
-            buyer: buyer.clone(),
-            amount,
-            token: token.clone(),
-            timestamp: env.ledger().timestamp(),
-            status: Status::Paid,
-        };
-        set_order(&env, &order_id, &order);
+        set_order(
+            &env,
+            &order_id,
+            &Order {
+                timestamp: env.ledger().timestamp(),
+                status: Status::Paid,
+                ..order.clone()
+            },
+        );
 
         PaymentReceived {
-            token: token.clone(),
-            buyer: buyer.clone(),
+            token: order.token.clone(),
+            buyer: order.buyer.clone(),
             merchant: merchant.clone(),
             order_id: order_id.clone(),
-            amount,
+            amount: order.amount,
         }
         .publish(&env);
 
@@ -203,8 +219,6 @@ impl Checkout {
         }
 
         let token_client = TokenClient::new(&env, &order.token);
-
-        // Release: contract -> merchant.
         token_client.transfer(
             &env.current_contract_address(),
             &MuxedAddress::from(&merchant),
@@ -245,8 +259,6 @@ impl Checkout {
         }
 
         let token_client = TokenClient::new(&env, &order.token);
-
-        // Refund: contract -> buyer.
         token_client.transfer(
             &env.current_contract_address(),
             &MuxedAddress::from(&order.buyer),

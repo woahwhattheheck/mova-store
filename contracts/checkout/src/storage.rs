@@ -13,6 +13,8 @@ pub enum DataKey {
     Admin,
     /// An order registry entry, keyed by 32-byte order id.
     Order(BytesN<32>),
+    /// Expiry for a merchant-authorized pending quote/order.
+    OrderExpiry(BytesN<32>),
     /// Whether the given SEP-41 token contract is accepted by the merchant.
     TokenAllowed(Address),
 }
@@ -38,16 +40,33 @@ pub fn set_admin(env: &Env, admin: &Address) {
 }
 
 pub fn get_order(env: &Env, order_id: &BytesN<32>) -> Option<Order> {
-    let order: Option<Order> = env.storage().persistent().get(&DataKey::Order(order_id.clone()));
+    let key = DataKey::Order(order_id.clone());
+    let order: Option<Order> = env.storage().persistent().get(&key);
     if order.is_some() {
-        extend_ttl(env, &DataKey::Order(order_id.clone()));
+        extend_ttl(env, &key);
     }
     order
 }
 
 pub fn set_order(env: &Env, order_id: &BytesN<32>, order: &Order) {
-    env.storage().persistent().set(&DataKey::Order(order_id.clone()), order);
-    extend_ttl(env, &DataKey::Order(order_id.clone()));
+    let key = DataKey::Order(order_id.clone());
+    env.storage().persistent().set(&key, order);
+    extend_ttl(env, &key);
+}
+
+pub fn get_order_expiry(env: &Env, order_id: &BytesN<32>) -> Option<u64> {
+    let key = DataKey::OrderExpiry(order_id.clone());
+    let expiry: Option<u64> = env.storage().persistent().get(&key);
+    if expiry.is_some() {
+        extend_ttl(env, &key);
+    }
+    expiry
+}
+
+pub fn set_order_expiry(env: &Env, order_id: &BytesN<32>, expires_at: u64) {
+    let key = DataKey::OrderExpiry(order_id.clone());
+    env.storage().persistent().set(&key, &expires_at);
+    extend_ttl(env, &key);
 }
 
 pub fn is_token_allowed(env: &Env, token: &Address) -> bool {

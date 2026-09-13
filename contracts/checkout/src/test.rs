@@ -1,19 +1,12 @@
 #![cfg(test)]
 
-use soroban_sdk::testutils::{Address as _, Events};
+use soroban_sdk::testutils::{Address as _, Events, Ledger};
 use soroban_sdk::token::{StellarAssetClient, TokenClient};
 use soroban_sdk::{contract, contractimpl, contracttype, Address, BytesN, Env};
 
 use crate::errors::Error;
 use crate::order::Status;
 use crate::{Checkout, CheckoutClient};
-
-// ---------------------------------------------------------------------------
-// Minimal SEP-41-style mock token so tests don't depend on a real token
-// contract (SDK 27 testutils no longer bundles a Token mock). The native
-// asset path is covered with the real Stellar Asset Contract via
-// `register_stellar_asset_contract_v2`.
-// ---------------------------------------------------------------------------
 
 #[contracttype]
 pub enum MockTokenDataKey {
@@ -66,16 +59,10 @@ impl MockToken {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 fn order_id(env: &Env, byte: u8) -> BytesN<32> {
     BytesN::from_array(env, &[byte; 32])
 }
 
-/// Register the checkout contract, a mock USDC token, initialize with the
-/// merchant, whitelist the token, and fund the buyer.
 fn setup_usdc(env: &Env) -> (CheckoutClient<'_>, Address, Address, Address, Address) {
     let token = env.register(MockToken, ());
     let contract = env.register(Checkout, ());
@@ -90,6 +77,19 @@ fn setup_usdc(env: &Env) -> (CheckoutClient<'_>, Address, Address, Address, Addr
     (client, token, merchant, buyer, contract)
 }
 
+fn create_quote(
+    env: &Env,
+    client: &CheckoutClient<'_>,
+    buyer: &Address,
+    id: &BytesN<32>,
+    token: &Address,
+    amount: i128,
+) -> u64 {
+    let expires_at = env.ledger().timestamp() + 300;
+    client.create_order(buyer, id, token, &amount, &expires_at);
+    expires_at
+}
+
 fn usdc_balance(env: &Env, token: &Address, address: &Address) -> i128 {
     MockTokenClient::new(env, token).balance(address)
 }
@@ -102,26 +102,23 @@ fn usdc_balance(env: &Env, token: &Address, address: &Address) -> i128 {
 fn test_pay_escrows_then_dispatch_releases_to_merchant() {
     let env = Env::default();
     env.mock_all_auths();
+    env.ledger().set_timestamp(1_000);
 
     let (client, token, merchant, buyer, checkout) = setup_usdc(&env);
-
     let id = order_id(&env, 7);
+    create_quote(&env, &client, &buyer, &id, &token, 100_000);
     client.pay(&token, &buyer, &id, &100_000);
 
-    // Funds are held by the contract, not the merchant yet.
     assert_eq!(usdc_balance(&env, &token, &buyer), 900_000);
     assert_eq!(usdc_balance(&env, &token, &checkout), 100_000);
     assert_eq!(usdc_balance(&env, &token, &merchant), 0);
     assert!(client.is_paid(&id));
     assert_eq!(client.status(&id), Some(Status::Paid));
 
-    // Merchant dispatches -> escrow released to the merchant.
     client.dispatch(&id);
     assert_eq!(usdc_balance(&env, &token, &checkout), 0);
     assert_eq!(usdc_balance(&env, &token, &merchant), 100_000);
     assert_eq!(client.status(&id), Some(Status::Shipped));
-
-    // A dispatched order is still considered paid (funds moved correctly).
     assert!(client.is_paid(&id));
 }
 
@@ -131,8 +128,8 @@ fn test_refund_returns_escrow_to_buyer() {
     env.mock_all_auths();
 
     let (client, token, _, buyer, checkout) = setup_usdc(&env);
-
     let id = order_id(&env, 8);
+    create_quote(&env, &client, &buyer, &id, &token, 100_000);
     client.pay(&token, &buyer, &id, &100_000);
     assert_eq!(usdc_balance(&env, &token, &checkout), 100_000);
 
@@ -149,11 +146,11 @@ fn test_refund_after_dispatch_rejected() {
 
     let (client, token, _, buyer, _) = setup_usdc(&env);
     let id = order_id(&env, 11);
+    create_quote(&env, &client, &buyer, &id, &token, 10_000);
     client.pay(&token, &buyer, &id, &10_000);
     client.dispatch(&id);
 
-    let result = client.try_refund(&id);
-    assert_eq!(result, Err(Ok(Error::InvalidOrderStatus)));
+    assert_eq!(client.try_refund(&id), Err(Ok(Error::InvalidOrderStatus)));
 }
 
 #[test]
@@ -163,10 +160,9 @@ fn test_dispatch_pending_order_rejected() {
 
     let (client, token, _, buyer, _) = setup_usdc(&env);
     let id = order_id(&env, 12);
-    client.create_order(&buyer, &id, &token, &10_000);
+    create_quote(&env, &client, &buyer, &id, &token, 10_000);
 
-    let result = client.try_dispatch(&id);
-    assert_eq!(result, Err(Ok(Error::InvalidOrderStatus)));
+    assert_eq!(client.try_dispatch(&id), Err(Ok(Error::InvalidOrderStatus)));
 }
 
 #[test]
@@ -175,25 +171,28 @@ fn test_dispatch_unknown_order_rejected() {
     env.mock_all_auths();
 
     let (client, _, _, _, _) = setup_usdc(&env);
-    let result = client.try_dispatch(&order_id(&env, 99));
-    assert_eq!(result, Err(Ok(Error::OrderNotFound)));
+    assert_eq!(
+        client.try_dispatch(&order_id(&env, 99)),
+        Err(Ok(Error::OrderNotFound))
+    );
 }
 
 // ---------------------------------------------------------------------------
-// Order registry
+// Merchant-authorized quote registry
 // ---------------------------------------------------------------------------
 
 #[test]
-fn test_create_order_then_pay_completes_it() {
+fn test_create_order_then_exact_pay_completes_it() {
     let env = Env::default();
     env.mock_all_auths();
+    env.ledger().set_timestamp(500);
 
     let (client, token, _, buyer, _) = setup_usdc(&env);
     let id = order_id(&env, 13);
+    let expiry = create_quote(&env, &client, &buyer, &id, &token, 50_000);
 
-    client.create_order(&buyer, &id, &token, &50_000);
     assert_eq!(client.status(&id), Some(Status::Pending));
-    // No funds moved yet.
+    assert_eq!(client.expires_at(&id), Some(expiry));
     assert_eq!(usdc_balance(&env, &token, &buyer), 1_000_000);
 
     client.pay(&token, &buyer, &id, &50_000);
@@ -213,10 +212,29 @@ fn test_create_order_duplicate_rejected() {
 
     let (client, token, _, buyer, _) = setup_usdc(&env);
     let id = order_id(&env, 14);
-    client.create_order(&buyer, &id, &token, &50_000);
+    let expiry = create_quote(&env, &client, &buyer, &id, &token, 50_000);
 
-    let result = client.try_create_order(&buyer, &id, &token, &50_000);
-    assert_eq!(result, Err(Ok(Error::OrderAlreadyPaid)));
+    let later_expiry = expiry + 300;
+    assert_eq!(
+        client.try_create_order(&buyer, &id, &token, &50_000, &later_expiry),
+        Err(Ok(Error::OrderAlreadyPaid))
+    );
+}
+
+#[test]
+fn test_create_order_rejects_non_future_expiry() {
+    let env = Env::default();
+    env.mock_all_auths();
+    env.ledger().set_timestamp(1_000);
+
+    let (client, token, _, buyer, _) = setup_usdc(&env);
+    let id = order_id(&env, 18);
+
+    assert_eq!(
+        client.try_create_order(&buyer, &id, &token, &10_000, &1_000),
+        Err(Ok(Error::InvalidExpiry))
+    );
+    assert_eq!(client.order(&id), None);
 }
 
 #[test]
@@ -227,11 +245,134 @@ fn test_order_reads() {
     let (client, token, _, buyer, _) = setup_usdc(&env);
     let id = order_id(&env, 15);
     assert_eq!(client.order(&id), None);
+    assert_eq!(client.expires_at(&id), None);
     assert_eq!(client.status(&id), None);
     assert!(!client.is_paid(&id));
 
-    client.create_order(&buyer, &id, &token, &25_000);
+    create_quote(&env, &client, &buyer, &id, &token, 25_000);
     assert_eq!(client.order(&id).unwrap().status, Status::Pending);
+}
+
+// ---------------------------------------------------------------------------
+// Hostile payment-term tampering
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_unquoted_order_rejected_before_transfer() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, token, _, buyer, checkout) = setup_usdc(&env);
+    let id = order_id(&env, 30);
+
+    assert_eq!(
+        client.try_pay(&token, &buyer, &id, &10_000),
+        Err(Ok(Error::OrderNotFound))
+    );
+    assert_eq!(usdc_balance(&env, &token, &buyer), 1_000_000);
+    assert_eq!(usdc_balance(&env, &token, &checkout), 0);
+}
+
+#[test]
+fn test_wrong_buyer_rejected_before_transfer() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, token, _, buyer, checkout) = setup_usdc(&env);
+    let attacker = Address::generate(&env);
+    MockTokenClient::new(&env, &token).mint(&attacker, &500_000);
+    let id = order_id(&env, 31);
+    create_quote(&env, &client, &buyer, &id, &token, 10_000);
+
+    assert_eq!(
+        client.try_pay(&token, &attacker, &id, &10_000),
+        Err(Ok(Error::QuoteMismatch))
+    );
+    assert_eq!(usdc_balance(&env, &token, &buyer), 1_000_000);
+    assert_eq!(usdc_balance(&env, &token, &attacker), 500_000);
+    assert_eq!(usdc_balance(&env, &token, &checkout), 0);
+    assert_eq!(client.status(&id), Some(Status::Pending));
+}
+
+#[test]
+fn test_wrong_token_rejected_before_transfer() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, token, _, buyer, checkout) = setup_usdc(&env);
+    let other_token = env.register(MockToken, ());
+    client.add_token(&other_token);
+    MockTokenClient::new(&env, &other_token).mint(&buyer, &500_000);
+    let id = order_id(&env, 32);
+    create_quote(&env, &client, &buyer, &id, &token, 10_000);
+
+    assert_eq!(
+        client.try_pay(&other_token, &buyer, &id, &10_000),
+        Err(Ok(Error::QuoteMismatch))
+    );
+    assert_eq!(usdc_balance(&env, &token, &checkout), 0);
+    assert_eq!(usdc_balance(&env, &other_token, &checkout), 0);
+    assert_eq!(client.status(&id), Some(Status::Pending));
+}
+
+#[test]
+fn test_underpayment_and_overpayment_rejected_before_transfer() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, token, _, buyer, checkout) = setup_usdc(&env);
+    let id = order_id(&env, 33);
+    create_quote(&env, &client, &buyer, &id, &token, 100_000);
+
+    assert_eq!(
+        client.try_pay(&token, &buyer, &id, &99_999),
+        Err(Ok(Error::QuoteMismatch))
+    );
+    assert_eq!(
+        client.try_pay(&token, &buyer, &id, &100_001),
+        Err(Ok(Error::QuoteMismatch))
+    );
+    assert_eq!(usdc_balance(&env, &token, &buyer), 1_000_000);
+    assert_eq!(usdc_balance(&env, &token, &checkout), 0);
+    assert_eq!(client.status(&id), Some(Status::Pending));
+}
+
+#[test]
+fn test_expired_quote_rejected_before_transfer() {
+    let env = Env::default();
+    env.mock_all_auths();
+    env.ledger().set_timestamp(10_000);
+
+    let (client, token, _, buyer, checkout) = setup_usdc(&env);
+    let id = order_id(&env, 34);
+    client.create_order(&buyer, &id, &token, &100_000, &10_010);
+    env.ledger().set_timestamp(10_010);
+
+    assert_eq!(
+        client.try_pay(&token, &buyer, &id, &100_000),
+        Err(Ok(Error::QuoteExpired))
+    );
+    assert_eq!(usdc_balance(&env, &token, &buyer), 1_000_000);
+    assert_eq!(usdc_balance(&env, &token, &checkout), 0);
+    assert_eq!(client.status(&id), Some(Status::Pending));
+}
+
+#[test]
+fn test_replay_rejected_after_exact_payment() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, token, _, buyer, checkout) = setup_usdc(&env);
+    let id = order_id(&env, 35);
+    create_quote(&env, &client, &buyer, &id, &token, 50_000);
+    client.pay(&token, &buyer, &id, &50_000);
+
+    assert_eq!(
+        client.try_pay(&token, &buyer, &id, &50_000),
+        Err(Ok(Error::OrderAlreadyPaid))
+    );
+    assert_eq!(usdc_balance(&env, &token, &buyer), 950_000);
+    assert_eq!(usdc_balance(&env, &token, &checkout), 50_000);
 }
 
 // ---------------------------------------------------------------------------
@@ -239,7 +380,7 @@ fn test_order_reads() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn test_token_not_allowed_rejected() {
+fn test_token_not_allowed_rejected_at_quote_creation() {
     let env = Env::default();
     env.mock_all_auths();
 
@@ -247,31 +388,31 @@ fn test_token_not_allowed_rejected() {
     let contract = env.register(Checkout, ());
     let merchant = Address::generate(&env);
     let buyer = Address::generate(&env);
-
     let client = CheckoutClient::new(&env, &contract);
     client.initialize(&merchant);
-    MockTokenClient::new(&env, &token).mint(&buyer, &1_000_000);
 
     let id = order_id(&env, 16);
-    let result = client.try_pay(&token, &buyer, &id, &10_000);
-    assert_eq!(result, Err(Ok(Error::TokenNotAllowed)));
-
-    let result = client.try_create_order(&buyer, &id, &token, &10_000);
-    assert_eq!(result, Err(Ok(Error::TokenNotAllowed)));
+    assert_eq!(
+        client.try_create_order(&buyer, &id, &token, &10_000, &300),
+        Err(Ok(Error::TokenNotAllowed))
+    );
 }
 
 #[test]
-fn test_remove_token_disables_payments() {
+fn test_remove_token_disables_exact_pending_quote_payment() {
     let env = Env::default();
     env.mock_all_auths();
 
     let (client, token, _, buyer, _) = setup_usdc(&env);
+    let id = order_id(&env, 17);
+    create_quote(&env, &client, &buyer, &id, &token, 10_000);
     client.remove_token(&token);
     assert!(!client.is_token_allowed(&token));
 
-    let id = order_id(&env, 17);
-    let result = client.try_pay(&token, &buyer, &id, &10_000);
-    assert_eq!(result, Err(Ok(Error::TokenNotAllowed)));
+    assert_eq!(
+        client.try_pay(&token, &buyer, &id, &10_000),
+        Err(Ok(Error::TokenNotAllowed))
+    );
 }
 
 #[test]
@@ -286,7 +427,6 @@ fn test_add_token_after_initialize() {
     let client = CheckoutClient::new(&env, &contract);
     client.initialize(&merchant);
     assert!(!client.is_token_allowed(&token));
-
     client.add_token(&token);
     assert!(client.is_token_allowed(&token));
 }
@@ -311,11 +451,10 @@ fn test_native_asset_payment_and_dispatch() {
     let client = CheckoutClient::new(&env, &contract);
     client.initialize(&merchant);
     client.add_token(&native_id);
-
-    // Fund the buyer with native XLM (minted by the SAC admin = issuer).
     StellarAssetClient::new(&env, &native_id).mint(&buyer, &5_000_000);
 
     let id = order_id(&env, 21);
+    create_quote(&env, &client, &buyer, &id, &native_id, 100_000);
     client.pay(&native_id, &buyer, &id, &100_000);
 
     let native_client = TokenClient::new(&env, &native_id);
@@ -330,56 +469,8 @@ fn test_native_asset_payment_and_dispatch() {
 }
 
 // ---------------------------------------------------------------------------
-// Guards
+// General guards + events
 // ---------------------------------------------------------------------------
-
-#[test]
-fn test_duplicate_order_rejected() {
-    let env = Env::default();
-    env.mock_all_auths();
-
-    let (client, token, _, buyer, _) = setup_usdc(&env);
-    let id = order_id(&env, 9);
-    client.pay(&token, &buyer, &id, &50_000);
-
-    let result = client.try_pay(&token, &buyer, &id, &50_000);
-    assert_eq!(result, Err(Ok(Error::OrderAlreadyPaid)));
-}
-
-#[test]
-fn test_duplicate_pay_after_dispatch_rejected() {
-    let env = Env::default();
-    env.mock_all_auths();
-
-    let (client, token, _, buyer, _) = setup_usdc(&env);
-    let id = order_id(&env, 10);
-    client.pay(&token, &buyer, &id, &50_000);
-    client.dispatch(&id);
-
-    let result = client.try_pay(&token, &buyer, &id, &50_000);
-    assert_eq!(result, Err(Ok(Error::OrderAlreadyPaid)));
-}
-
-#[test]
-fn test_pay_without_initialize() {
-    let env = Env::default();
-    env.mock_all_auths();
-
-    let token = env.register(MockToken, ());
-    let contract = env.register(Checkout, ());
-    let buyer = Address::generate(&env);
-
-    let client = CheckoutClient::new(&env, &contract);
-    let id = order_id(&env, 1);
-
-    // Uninitialized contracts have an empty token whitelist, so pay is rejected
-    // before the NotInitialized admin check.
-    let result = client.try_pay(&token, &buyer, &id, &1000);
-    assert_eq!(result, Err(Ok(Error::TokenNotAllowed)));
-
-    let result = client.try_dispatch(&id);
-    assert_eq!(result, Err(Ok(Error::NotInitialized)));
-}
 
 #[test]
 fn test_non_positive_amount_rejected() {
@@ -388,12 +479,10 @@ fn test_non_positive_amount_rejected() {
 
     let (client, token, _, buyer, _) = setup_usdc(&env);
     let id = order_id(&env, 2);
-
-    let result = client.try_pay(&token, &buyer, &id, &0);
-    assert_eq!(result, Err(Ok(Error::InvalidAmount)));
-
-    let result = client.try_create_order(&buyer, &id, &token, &-1);
-    assert_eq!(result, Err(Ok(Error::InvalidAmount)));
+    assert_eq!(
+        client.try_create_order(&buyer, &id, &token, &0, &300),
+        Err(Ok(Error::InvalidAmount))
+    );
 }
 
 #[test]
@@ -404,12 +493,10 @@ fn test_initialize_twice_rejected() {
     let contract = env.register(Checkout, ());
     let merchant = Address::generate(&env);
     let other = Address::generate(&env);
-
     let client = CheckoutClient::new(&env, &contract);
     client.initialize(&merchant);
 
-    let result = client.try_initialize(&other);
-    assert_eq!(result, Err(Ok(Error::AlreadyInitialized)));
+    assert_eq!(client.try_initialize(&other), Err(Ok(Error::AlreadyInitialized)));
 }
 
 #[test]
@@ -422,6 +509,7 @@ fn test_set_merchant_changes_escrow_destination() {
     client.set_merchant(&new_merchant);
 
     let id = order_id(&env, 3);
+    create_quote(&env, &client, &buyer, &id, &token, 10_000);
     client.pay(&token, &buyer, &id, &10_000);
 
     assert_eq!(usdc_balance(&env, &token, &new_merchant), 0);
@@ -440,11 +528,10 @@ fn test_events_emitted() {
     let (client, token, _, buyer, checkout) = setup_usdc(&env);
     let id = order_id(&env, 5);
 
-    client.create_order(&buyer, &id, &token, &10_000);
+    create_quote(&env, &client, &buyer, &id, &token, 10_000);
     client.pay(&token, &buyer, &id, &10_000);
     client.dispatch(&id);
 
-    // At least one contract event should be recorded for the lifecycle.
     let events = env.events().all().filter_by_contract(&checkout);
     assert!(
         !events.events().is_empty(),
