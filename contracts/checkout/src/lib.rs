@@ -3,8 +3,10 @@
 mod errors;
 mod events;
 mod order;
+mod quote;
 mod storage;
 mod test;
+mod quote_test;
 
 use soroban_sdk::token::TokenClient;
 use soroban_sdk::{contract, contractimpl, Address, BytesN, Env, MuxedAddress};
@@ -12,8 +14,10 @@ use soroban_sdk::{contract, contractimpl, Address, BytesN, Env, MuxedAddress};
 use crate::errors::Error;
 use crate::events::{OrderCreated, OrderRefunded, OrderShipped, PaymentReceived};
 use crate::order::{Order, Status};
+use crate::quote::{quote_message, QuoteAuth, MAX_QUOTE_TTL_SECONDS};
 use crate::storage::{
-    get_admin, get_order, has_admin, is_token_allowed, set_admin, set_order, set_token_allowed,
+    get_admin, get_order, get_quote_auth, get_quote_signer, has_admin, is_token_allowed,
+    remove_quote_auth, set_admin, set_order, set_quote_auth, set_quote_signer, set_token_allowed,
 };
 
 #[contract]
@@ -46,6 +50,20 @@ impl Checkout {
         get_admin(&env)
     }
 
+    /// Rotate the dedicated Ed25519 key that authorizes merchant quotes.
+    /// The private half is intentionally never stored on-chain.
+    pub fn set_quote_signer(env: Env, signer: BytesN<32>) -> Result<(), Error> {
+        let admin = get_admin(&env)?;
+        admin.require_auth();
+        set_quote_signer(&env, &signer);
+        Ok(())
+    }
+
+    /// Read the public quote-verification key.
+    pub fn quote_signer(env: Env) -> Result<BytesN<32>, Error> {
+        get_quote_signer(&env)
+    }
+
     /// Approve a SEP-41 token contract for payments. Only the merchant can
     /// call this. Every accepted token (USDC, native XLM via its Stellar
     /// Asset Contract, ...) must be whitelisted before it can fund orders.
@@ -71,12 +89,10 @@ impl Checkout {
 
     /// Register a buyer's intent to fund an order. The buyer authorizes this.
     ///
-    /// * `buyer`    - the address that will pay.
-    /// * `order_id` - a unique 32-byte identifier for the order.
-    /// * `token`    - the SEP-41 token contract the buyer will pay with.
-    /// * `amount`   - the intended amount, in raw token units.
-    ///
-    /// Emits `create_order`. No funds move until `pay` is called.
+    /// This legacy path does not install merchant quote authority. Phase-1
+    /// compatibility keeps it available for existing clients, but quote-only
+    /// payment uses `create_quoted_order` + `pay_quoted` and refuses records
+    /// created only through this method.
     pub fn create_order(
         env: Env,
         buyer: Address,
@@ -118,20 +134,71 @@ impl Checkout {
         Ok(())
     }
 
+    /// Register a pending order only after verifying a merchant-server quote.
+    ///
+    /// The off-chain quote service signs the canonical message produced by
+    /// `quote::quote_message` using a dedicated Ed25519 key. The merchant
+    /// controls the matching public key through `set_quote_signer`.
+    pub fn create_quoted_order(
+        env: Env,
+        buyer: Address,
+        order_id: BytesN<32>,
+        token: Address,
+        amount: i128,
+        expires_at: u64,
+        signature: BytesN<64>,
+    ) -> Result<(), Error> {
+        if amount <= 0 {
+            return Err(Error::InvalidAmount);
+        }
+        if !is_token_allowed(&env, &token) {
+            return Err(Error::TokenNotAllowed);
+        }
+
+        let now = env.ledger().timestamp();
+        if expires_at <= now || expires_at - now > MAX_QUOTE_TTL_SECONDS {
+            return Err(Error::InvalidQuoteExpiry);
+        }
+
+        if let Some(existing) = get_order(&env, &order_id) {
+            if existing.status != Status::Pending {
+                return Err(Error::OrderAlreadyPaid);
+            }
+        }
+
+        let signer = get_quote_signer(&env)?;
+        let message = quote_message(&env, &order_id, &buyer, &token, amount, expires_at);
+        env.crypto()
+            .ed25519_verify(&signer, &message, &signature);
+
+        let order = Order {
+            buyer: buyer.clone(),
+            amount,
+            token: token.clone(),
+            timestamp: now,
+            status: Status::Pending,
+        };
+        set_order(&env, &order_id, &order);
+        set_quote_auth(&env, &order_id, &QuoteAuth { expires_at });
+
+        OrderCreated {
+            token,
+            buyer,
+            order_id,
+            amount,
+            timestamp: now,
+        }
+        .publish(&env);
+
+        Ok(())
+    }
+
     /// Pay for an order. The buyer authorizes the transfer.
     ///
-    /// * `token`    - the [SEP-41 token](https://stellar.org/developers/learn/guides/interoperability/sep-41)
-    ///                contract to pay with (whitelisted by the merchant).
-    /// * `buyer`    - the address paying for the order (must authorize the transfer).
-    /// * `order_id` - a unique 32-byte identifier for the order.
-    /// * `amount`   - the exact amount of `token` to escrow, in raw token units.
-    ///
-    /// Transfers `amount` from `buyer` into the **contract's escrow** and
-    /// records the order as `Paid`. Funds are released to the merchant by
-    /// calling `dispatch`, or returned to the buyer by calling `refund`.
-    ///
-    /// Emits `pay` (aliased `payment_received`). An order can only be paid
-    /// once; duplicate payments are rejected with `OrderAlreadyPaid`.
+    /// This is the legacy direct-pay compatibility path. It remains unchanged
+    /// during Phase 1 so existing clients/tests stay executable while the
+    /// quote-authority contract and server are integrated. The final quote
+    /// carrier removes this bypass after the #19 checkout rejoin.
     pub fn pay(
         env: Env,
         token: Address,
@@ -158,16 +225,12 @@ impl Checkout {
         }
 
         let token_client = TokenClient::new(&env, &token);
-
-        // Escrow: buyer -> contract. The contract's own authorization on the
-        // transfer is derived from this invocation (it holds the funds).
         token_client.transfer(
             &buyer,
             &MuxedAddress::from(&env.current_contract_address()),
             &amount,
         );
 
-        // Record the order as Paid, reflecting the actual payment.
         let order = Order {
             buyer: buyer.clone(),
             amount,
@@ -176,6 +239,71 @@ impl Checkout {
             status: Status::Paid,
         };
         set_order(&env, &order_id, &order);
+
+        PaymentReceived {
+            token: token.clone(),
+            buyer: buyer.clone(),
+            merchant: merchant.clone(),
+            order_id: order_id.clone(),
+            amount,
+        }
+        .publish(&env);
+
+        Ok(())
+    }
+
+    /// Pay exactly the amount, buyer and token authorized by a live merchant
+    /// quote. Missing/expired/mismatched quote state is rejected before token
+    /// transfer or order overwrite.
+    pub fn pay_quoted(
+        env: Env,
+        token: Address,
+        buyer: Address,
+        order_id: BytesN<32>,
+        amount: i128,
+    ) -> Result<(), Error> {
+        buyer.require_auth();
+
+        if amount <= 0 {
+            return Err(Error::InvalidAmount);
+        }
+        if !is_token_allowed(&env, &token) {
+            return Err(Error::TokenNotAllowed);
+        }
+
+        let merchant = get_admin(&env)?;
+        let order = get_order(&env, &order_id).ok_or(Error::OrderNotFound)?;
+        if order.status != Status::Pending {
+            return Err(Error::OrderAlreadyPaid);
+        }
+
+        let quote = get_quote_auth(&env, &order_id).ok_or(Error::QuoteRequired)?;
+        if env.ledger().timestamp() >= quote.expires_at {
+            return Err(Error::QuoteExpired);
+        }
+        if order.buyer != buyer || order.token != token || order.amount != amount {
+            return Err(Error::QuoteMismatch);
+        }
+
+        let token_client = TokenClient::new(&env, &token);
+        token_client.transfer(
+            &buyer,
+            &MuxedAddress::from(&env.current_contract_address()),
+            &amount,
+        );
+
+        set_order(
+            &env,
+            &order_id,
+            &Order {
+                buyer: buyer.clone(),
+                amount,
+                token: token.clone(),
+                timestamp: env.ledger().timestamp(),
+                status: Status::Paid,
+            },
+        );
+        remove_quote_auth(&env, &order_id);
 
         PaymentReceived {
             token: token.clone(),
