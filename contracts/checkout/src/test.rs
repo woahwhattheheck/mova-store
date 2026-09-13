@@ -93,6 +93,25 @@ fn set_price(client: &CheckoutClient<'_>, token: &Address, env: &Env, product: u
 }
 
 #[test]
+fn quote_signer_starts_as_merchant_and_rotates_independently() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, _, merchant, _, _) = setup(&env);
+    let server_signer = Address::generate(&env);
+    let replacement_merchant = Address::generate(&env);
+
+    assert_eq!(client.quote_signer(), merchant);
+    client.set_quote_signer(&server_signer);
+    assert_eq!(client.quote_signer(), server_signer);
+
+    // Merchant/escrow custody and quote-registration custody are intentionally
+    // separate. Rotating the merchant must not silently rotate the server key.
+    client.set_merchant(&replacement_merchant);
+    assert_eq!(client.merchant(), replacement_merchant);
+    assert_eq!(client.quote_signer(), server_signer);
+}
+
+#[test]
 fn quote_uses_merchant_catalog_not_client_price() {
     let env = Env::default();
     env.mock_all_auths();
@@ -318,6 +337,7 @@ fn initialize_and_catalog_guards_remain_fail_closed() {
         Err(Ok(Error::NotInitialized))
     );
     client.initialize(&merchant);
+    assert_eq!(client.quote_signer(), merchant);
     assert_eq!(client.try_initialize(&other), Err(Ok(Error::AlreadyInitialized)));
     assert_eq!(
         client.try_set_product_price(&id(&env, 13), &token, &1),
