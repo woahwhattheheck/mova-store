@@ -1,13 +1,13 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 
 import { createClient } from "@supabase/supabase-js";
 import { StrKey } from "@stellar/stellar-sdk";
 import { NextResponse } from "next/server";
 
+import { committedOrderId } from "@/lib/checkout/quote-commitment.server";
 import {
   deriveMerchantQuote,
   normalizeCartLines,
-  quoteCommitmentPayload,
   type CanonicalProduct,
 } from "@/lib/checkout/merchant-quote";
 import { defaultToken } from "@/lib/stellar/config";
@@ -90,22 +90,18 @@ export async function POST(request: Request) {
 
   let quote;
   try {
-    const quoteNonce = randomUUID();
     const provisional = deriveMerchantQuote({
       lines,
       products: (data ?? []) as CanonicalProduct[],
       buyer: candidate.buyer,
       tokenContractId: quotedToken.contractId,
       orderId: "MQ-pending-commitment",
-      quoteNonce,
+      quoteNonce: randomUUID(),
       nowSeconds: Math.floor(Date.now() / 1000),
     });
 
     const { orderId: _provisionalOrderId, ...commitmentFields } = provisional;
-    const commitment = createHash("sha256")
-      .update(quoteCommitmentPayload(commitmentFields))
-      .digest("hex");
-    quote = { ...provisional, orderId: `MQ-${commitment}` };
+    quote = { ...provisional, orderId: committedOrderId(commitmentFields) };
   } catch (error) {
     return errorResponse(
       error instanceof Error ? error.message : "could not derive merchant quote",
