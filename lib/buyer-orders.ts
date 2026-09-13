@@ -58,6 +58,11 @@ export interface PaidOrderSnapshotInput {
   createdAt?: string;
 }
 
+export interface SaveBuyerOrderOptions {
+  /** Fail unless the order reaches at least one persistence target. */
+  requirePersistence?: boolean;
+}
+
 interface StoredOrderEnvelope {
   schemaVersion: 1;
   lines: OrderItem[];
@@ -268,7 +273,7 @@ export async function savePaidBuyerOrderOnce(
     }
     return existing;
   }
-  return saveBuyerOrder(candidate);
+  return saveBuyerOrder(candidate, { requirePersistence: true });
 }
 
 /**
@@ -276,7 +281,10 @@ export async function savePaidBuyerOrderOnce(
  * The active Supabase session is authoritative for ownership. Guest orders remain
  * device-local and never attempt a remote insert.
  */
-export async function saveBuyerOrder(order: BuyerOrder): Promise<BuyerOrder> {
+export async function saveBuyerOrder(
+  order: BuyerOrder,
+  options: SaveBuyerOrderOptions = {}
+): Promise<BuyerOrder> {
   let sessionUser: { id: string; email?: string | null } | null = null;
 
   try {
@@ -309,6 +317,9 @@ export async function saveBuyerOrder(order: BuyerOrder): Promise<BuyerOrder> {
         fulfillment: order.fulfillment ? { ...order.fulfillment } : undefined,
       };
 
+  let localPersistenceSucceeded = false;
+  let remotePersistenceSucceeded = false;
+
   // 1. Cache locally using only session-derived ownership.
   try {
     const cached = getCachedBuyerOrders();
@@ -320,6 +331,7 @@ export async function saveBuyerOrder(order: BuyerOrder): Promise<BuyerOrder> {
     }
     if (typeof window !== "undefined") {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(cached));
+      localPersistenceSucceeded = true;
     }
   } catch (err) {
     console.warn("Failed to cache order to localStorage:", err);
@@ -349,11 +361,16 @@ export async function saveBuyerOrder(order: BuyerOrder): Promise<BuyerOrder> {
       if (error) {
         throw new Error(error.message);
       }
+      remotePersistenceSucceeded = true;
     } catch (err) {
       // Supabase may be unavailable in dev/offline; the local cache above keeps
       // the order accessible without weakening the database ownership boundary.
       console.warn("Could not insert order into Supabase, kept in local cache:", err);
     }
+  }
+
+  if (options.requirePersistence && !localPersistenceSucceeded && !remotePersistenceSucceeded) {
+    throw new Error("Could not persist paid order details");
   }
 
   return cachedOrder;
