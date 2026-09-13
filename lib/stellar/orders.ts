@@ -32,6 +32,7 @@ import { hashOrderId, bytesToHex } from "./scval";
 // ---------------------------------------------------------------------------
 
 export type OrderStatus = "Pending" | "Paid" | "Shipped" | "Refunded" | "Unknown";
+export type OrderActionKind = "dispatch" | "refund";
 
 export interface OrderDetails {
   orderId: string;
@@ -51,6 +52,13 @@ export interface OrderActionResult {
   success: boolean;
   txHash?: string;
   ledger?: number;
+  error?: string;
+}
+
+export interface OrderActionPreflight {
+  allowed: boolean;
+  action: OrderActionKind;
+  order?: OrderDetails;
   error?: string;
 }
 
@@ -204,6 +212,92 @@ export async function readOrder(orderId: string): Promise<OrderDetails | null> {
 }
 
 // ---------------------------------------------------------------------------
+// Irreversible Action Safety
+// ---------------------------------------------------------------------------
+
+/**
+ * Pure validation for merchant actions. Indexed events are display hints only;
+ * dispatch/refund authority must come from a fresh contract read showing that
+ * escrow is still in the Paid state.
+ */
+export function validateOrderActionPreflight(
+  orderId: string,
+  action: OrderActionKind,
+  order: OrderDetails | null
+): OrderActionPreflight {
+  const normalizedOrderId = orderId.trim();
+  const actionLabel = action === "dispatch" ? "ship" : "refund";
+
+  if (!normalizedOrderId) {
+    return {
+      allowed: false,
+      action,
+      error: `Cannot ${actionLabel} an order without an order id.`,
+    };
+  }
+
+  if (!order) {
+    return {
+      allowed: false,
+      action,
+      error: `Cannot ${actionLabel} order ${normalizedOrderId}: current on-chain state could not be read. Refresh and try again.`,
+    };
+  }
+
+  if (order.orderId !== normalizedOrderId) {
+    return {
+      allowed: false,
+      action,
+      order,
+      error: `Cannot ${actionLabel} order ${normalizedOrderId}: the contract read returned a different order id.`,
+    };
+  }
+
+  if (order.status !== "Paid") {
+    return {
+      allowed: false,
+      action,
+      order,
+      error: `Cannot ${actionLabel} order ${normalizedOrderId}: on-chain status is ${order.status}, not Paid. Refresh before taking another action.`,
+    };
+  }
+
+  if (order.amount <= BigInt(0) || !order.buyer || !order.token) {
+    return {
+      allowed: false,
+      action,
+      order,
+      error: `Cannot ${actionLabel} order ${normalizedOrderId}: on-chain escrow details are incomplete.`,
+    };
+  }
+
+  return { allowed: true, action, order };
+}
+
+/**
+ * Reads current contract state and refuses stale or malformed action targets.
+ * Action functions call this again immediately before wallet connection/signing,
+ * so the UI confirmation is defense-in-depth rather than the sole safety gate.
+ */
+export async function preflightOrderAction(
+  orderId: string,
+  action: OrderActionKind
+): Promise<OrderActionPreflight> {
+  try {
+    const order = await readOrder(orderId);
+    return validateOrderActionPreflight(orderId, action, order);
+  } catch (err) {
+    return {
+      allowed: false,
+      action,
+      error: `Cannot ${action === "dispatch" ? "ship" : "refund"} order ${orderId}: ${
+        err instanceof Error ? err.message : "current on-chain state could not be read"
+      }`,
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Dispatch Order (Release Escrow to Merchant)
 // ---------------------------------------------------------------------------
 
@@ -215,6 +309,11 @@ export async function dispatchOrder(
   orderId: string
 ): Promise<OrderActionResult> {
   try {
+    const preflight = await preflightOrderAction(orderId, "dispatch");
+    if (!preflight.allowed) {
+      return { success: false, error: preflight.error || "Dispatch preflight failed" };
+    }
+
     const publicKey = await connectWallet();
     const server = new rpc.Server(RPC_URL);
     const contract = new Contract(CHECKOUT_CONTRACT_ID);
@@ -236,7 +335,8 @@ export async function dispatchOrder(
       .setTimeout(TX_TIMEOUT_SECONDS)
       .build();
 
-    // Simulate to get resource fees
+    // Simulate to get resource fees. Contract merchant authorization and current
+    // escrow status remain final authority after the client-side preflight.
     const simResult = await server.simulateTransaction(tx);
 
     if (rpc.Api.isSimulationError(simResult)) {
@@ -296,6 +396,11 @@ export async function dispatchOrder(
  */
 export async function refundOrder(orderId: string): Promise<OrderActionResult> {
   try {
+    const preflight = await preflightOrderAction(orderId, "refund");
+    if (!preflight.allowed) {
+      return { success: false, error: preflight.error || "Refund preflight failed" };
+    }
+
     const publicKey = await connectWallet();
     const server = new rpc.Server(RPC_URL);
     const contract = new Contract(CHECKOUT_CONTRACT_ID);
@@ -317,7 +422,8 @@ export async function refundOrder(orderId: string): Promise<OrderActionResult> {
       .setTimeout(TX_TIMEOUT_SECONDS)
       .build();
 
-    // Simulate
+    // Simulate. Contract merchant authorization and current escrow status remain
+    // final authority after the client-side preflight.
     const simResult = await server.simulateTransaction(tx);
 
     if (rpc.Api.isSimulationError(simResult)) {
