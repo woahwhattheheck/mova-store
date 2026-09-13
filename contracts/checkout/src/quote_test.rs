@@ -2,21 +2,69 @@
 
 use ed25519_dalek::{Signer, SigningKey};
 use soroban_sdk::testutils::{Address as _, Ledger};
-use soroban_sdk::{Address, BytesN, Env};
+use soroban_sdk::{contract, contractimpl, contracttype, Address, BytesN, Env};
 
 use crate::errors::Error;
 use crate::order::Status;
 use crate::quote::quote_message;
-use crate::{Checkout, CheckoutClient, MockToken, MockTokenClient};
+use crate::{Checkout, CheckoutClient};
 
 const SIGNING_SEED: [u8; 32] = [7u8; 32];
+
+#[contracttype]
+pub enum QuoteTokenDataKey {
+    Balance(Address),
+}
+
+#[contract]
+pub struct QuoteToken;
+
+#[contractimpl]
+impl QuoteToken {
+    pub fn mint(env: Env, to: Address, amount: i128) {
+        let current: i128 = env
+            .storage()
+            .persistent()
+            .get(&QuoteTokenDataKey::Balance(to.clone()))
+            .unwrap_or(0);
+        env.storage()
+            .persistent()
+            .set(&QuoteTokenDataKey::Balance(to), &(current + amount));
+    }
+
+    pub fn balance(env: Env, id: Address) -> i128 {
+        env.storage()
+            .persistent()
+            .get(&QuoteTokenDataKey::Balance(id))
+            .unwrap_or(0)
+    }
+
+    pub fn transfer(env: Env, from: Address, to: Address, amount: i128) {
+        let from_balance: i128 = env
+            .storage()
+            .persistent()
+            .get(&QuoteTokenDataKey::Balance(from.clone()))
+            .unwrap_or(0);
+        let to_balance: i128 = env
+            .storage()
+            .persistent()
+            .get(&QuoteTokenDataKey::Balance(to.clone()))
+            .unwrap_or(0);
+        env.storage()
+            .persistent()
+            .set(&QuoteTokenDataKey::Balance(from), &(from_balance - amount));
+        env.storage()
+            .persistent()
+            .set(&QuoteTokenDataKey::Balance(to), &(to_balance + amount));
+    }
+}
 
 fn order_id(env: &Env, byte: u8) -> BytesN<32> {
     BytesN::from_array(env, &[byte; 32])
 }
 
 fn setup(env: &Env) -> (CheckoutClient<'_>, Address, Address, Address, Address) {
-    let token = env.register(MockToken, ());
+    let token = env.register(QuoteToken, ());
     let contract = env.register(Checkout, ());
     let merchant = Address::generate(env);
     let buyer = Address::generate(env);
@@ -29,7 +77,7 @@ fn setup(env: &Env) -> (CheckoutClient<'_>, Address, Address, Address, Address) 
     let signer = BytesN::from_array(env, &signing.verifying_key().to_bytes());
     client.set_quote_signer(&signer);
 
-    MockTokenClient::new(env, &token).mint(&buyer, &1_000_000);
+    QuoteTokenClient::new(env, &token).mint(&buyer, &1_000_000);
     (client, token, merchant, buyer, contract)
 }
 
@@ -75,8 +123,8 @@ fn signed_quote_exact_payment_succeeds() {
     client.pay_quoted(&token, &buyer, &id, &125_000);
 
     assert_eq!(client.status(&id), Some(Status::Paid));
-    assert_eq!(MockTokenClient::new(&env, &token).balance(&buyer), 875_000);
-    assert_eq!(MockTokenClient::new(&env, &token).balance(&checkout), 125_000);
+    assert_eq!(QuoteTokenClient::new(&env, &token).balance(&buyer), 875_000);
+    assert_eq!(QuoteTokenClient::new(&env, &token).balance(&checkout), 125_000);
 }
 
 #[test]
@@ -87,7 +135,7 @@ fn quoted_payment_rejects_wrong_buyer_before_transfer() {
 
     let (client, token, _, buyer, checkout) = setup(&env);
     let other = Address::generate(&env);
-    MockTokenClient::new(&env, &token).mint(&other, &1_000_000);
+    QuoteTokenClient::new(&env, &token).mint(&other, &1_000_000);
     let id = order_id(&env, 32);
     authorize(&env, &client, &token, &buyer, &id, 50_000, 2_600);
 
@@ -95,8 +143,8 @@ fn quoted_payment_rejects_wrong_buyer_before_transfer() {
         client.try_pay_quoted(&token, &other, &id, &50_000),
         Err(Ok(Error::QuoteMismatch))
     );
-    assert_eq!(MockTokenClient::new(&env, &token).balance(&other), 1_000_000);
-    assert_eq!(MockTokenClient::new(&env, &token).balance(&checkout), 0);
+    assert_eq!(QuoteTokenClient::new(&env, &token).balance(&other), 1_000_000);
+    assert_eq!(QuoteTokenClient::new(&env, &token).balance(&checkout), 0);
 }
 
 #[test]
@@ -106,9 +154,9 @@ fn quoted_payment_rejects_wrong_token_and_amount() {
     env.ledger().set_timestamp(3_000);
 
     let (client, token, _, buyer, checkout) = setup(&env);
-    let other_token = env.register(MockToken, ());
+    let other_token = env.register(QuoteToken, ());
     client.add_token(&other_token);
-    MockTokenClient::new(&env, &other_token).mint(&buyer, &1_000_000);
+    QuoteTokenClient::new(&env, &other_token).mint(&buyer, &1_000_000);
 
     let id = order_id(&env, 33);
     authorize(&env, &client, &token, &buyer, &id, 75_000, 3_600);
@@ -125,7 +173,7 @@ fn quoted_payment_rejects_wrong_token_and_amount() {
         client.try_pay_quoted(&token, &buyer, &id, &75_001),
         Err(Ok(Error::QuoteMismatch))
     );
-    assert_eq!(MockTokenClient::new(&env, &token).balance(&checkout), 0);
+    assert_eq!(QuoteTokenClient::new(&env, &token).balance(&checkout), 0);
 }
 
 #[test]
@@ -187,7 +235,7 @@ fn unquoted_pending_order_cannot_use_quoted_payment() {
         client.try_pay_quoted(&token, &buyer, &id, &20_000),
         Err(Ok(Error::QuoteRequired))
     );
-    assert_eq!(MockTokenClient::new(&env, &token).balance(&checkout), 0);
+    assert_eq!(QuoteTokenClient::new(&env, &token).balance(&checkout), 0);
 }
 
 #[test]
@@ -213,7 +261,7 @@ fn quote_signer_must_be_configured() {
     env.mock_all_auths();
     env.ledger().set_timestamp(7_000);
 
-    let token = env.register(MockToken, ());
+    let token = env.register(QuoteToken, ());
     let contract = env.register(Checkout, ());
     let merchant = Address::generate(&env);
     let buyer = Address::generate(&env);
