@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { Account, Keypair, TransactionBuilder, Networks, rpc } from "@stellar/stellar-sdk";
+import { Account, TransactionBuilder, Networks, rpc } from "@stellar/stellar-sdk";
 
 vi.mock("@stellar/freighter-api", () => ({
   getAddress: vi.fn(),
@@ -21,6 +21,17 @@ import {
   orderIdHash,
   payWithStellar,
 } from "../../../lib/stellar/checkout";
+
+function expectWalletErrorCode(fn: () => unknown, code: string) {
+  let caught: unknown;
+  try {
+    fn();
+  } catch (err) {
+    caught = err;
+  }
+  expect(caught).toBeInstanceOf(WalletError);
+  expect((caught as WalletError).code).toBe(code);
+}
 
 describe("usdToRawUnits", () => {
   it("converts a typical USD price to 7-decimal raw units", () => {
@@ -44,14 +55,7 @@ describe("usdToRawUnits", () => {
   ];
 
   it.each(cases)("throws WalletError with code INVALID_AMOUNT for %s", (_label, value) => {
-    let caught: unknown;
-    try {
-      usdToRawUnits(value);
-    } catch (err) {
-      caught = err;
-    }
-    expect(caught).toBeInstanceOf(WalletError);
-    expect((caught as WalletError).code).toBe("INVALID_AMOUNT");
+    expectWalletErrorCode(() => usdToRawUnits(value), "INVALID_AMOUNT");
   });
 });
 
@@ -86,8 +90,9 @@ describe("assertExactPaymentReceipt", () => {
   });
 
   it("fails closed when a successful transaction has no payment receipt", () => {
-    expect(() => assertExactPaymentReceipt(null, expected)).toThrowError(
-      expect.objectContaining({ code: "PAYMENT_RECEIPT_MISSING" })
+    expectWalletErrorCode(
+      () => assertExactPaymentReceipt(null, expected),
+      "PAYMENT_RECEIPT_MISSING"
     );
   });
 
@@ -98,8 +103,9 @@ describe("assertExactPaymentReceipt", () => {
     ["underpayment", { amount: "9999999" }],
     ["malformed amount", { amount: "10 USDC" }],
   ])("fails closed on %s mismatch", (_label, patch) => {
-    expect(() => assertExactPaymentReceipt({ ...receipt, ...patch }, expected)).toThrowError(
-      expect.objectContaining({ code: "PAYMENT_RECEIPT_MISMATCH" })
+    expectWalletErrorCode(
+      () => assertExactPaymentReceipt({ ...receipt, ...patch }, expected),
+      "PAYMENT_RECEIPT_MISMATCH"
     );
   });
 });
