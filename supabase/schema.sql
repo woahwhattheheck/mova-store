@@ -30,7 +30,24 @@ create trigger products_updated_at_trigger
   before update on public.products
   for each row execute procedure public.handle_updated_at();
 
--- Public read; authenticated write (tighten further for production admins)
+-- Server-side admin authority comes from auth.users.raw_app_meta_data, exposed in
+-- the signed JWT as app_metadata. Unlike user_metadata, authenticated users
+-- cannot self-edit app_metadata through the normal client APIs.
+create or replace function public.is_admin()
+returns boolean
+language sql
+stable
+set search_path = ''
+as $$
+  select
+    coalesce(auth.jwt() -> 'app_metadata' ->> 'role', '') = 'admin'
+    or lower(coalesce(auth.jwt() -> 'app_metadata' ->> 'is_admin', 'false')) = 'true';
+$$;
+
+comment on function public.is_admin() is
+  'True only when the authenticated JWT carries app_metadata.role=admin or app_metadata.is_admin=true.';
+
+-- Public read; server-authorized admin writes only.
 alter table public.products enable row level security;
 
 drop policy if exists "Public can read products" on public.products;
@@ -38,24 +55,30 @@ create policy "Public can read products"
   on public.products for select
   using (true);
 
+-- Remove the historical authenticated-wide policies when this schema is
+-- reapplied to an existing project.
 drop policy if exists "Authenticated users can insert products" on public.products;
-create policy "Authenticated users can insert products"
+drop policy if exists "Authenticated users can update products" on public.products;
+drop policy if exists "Authenticated users can delete products" on public.products;
+
+drop policy if exists "Admins can insert products" on public.products;
+create policy "Admins can insert products"
   on public.products for insert
   to authenticated
-  with check (true);
+  with check (public.is_admin());
 
-drop policy if exists "Authenticated users can update products" on public.products;
-create policy "Authenticated users can update products"
+drop policy if exists "Admins can update products" on public.products;
+create policy "Admins can update products"
   on public.products for update
   to authenticated
-  using (true)
-  with check (true);
+  using (public.is_admin())
+  with check (public.is_admin());
 
-drop policy if exists "Authenticated users can delete products" on public.products;
-create policy "Authenticated users can delete products"
+drop policy if exists "Admins can delete products" on public.products;
+create policy "Admins can delete products"
   on public.products for delete
   to authenticated
-  using (true);
+  using (public.is_admin());
 
 -- Storage bucket for product images (create via Dashboard → Storage if needed)
 insert into storage.buckets (id, name, public)
@@ -67,23 +90,29 @@ create policy "Public can view product images"
   on storage.objects for select
   using (bucket_id = 'products');
 
+-- Remove the historical authenticated-wide storage policies on reapply.
 drop policy if exists "Authenticated can upload product images" on storage.objects;
-create policy "Authenticated can upload product images"
+drop policy if exists "Authenticated can update product images" on storage.objects;
+drop policy if exists "Authenticated can delete product images" on storage.objects;
+
+drop policy if exists "Admins can upload product images" on storage.objects;
+create policy "Admins can upload product images"
   on storage.objects for insert
   to authenticated
-  with check (bucket_id = 'products');
+  with check (bucket_id = 'products' and public.is_admin());
 
-drop policy if exists "Authenticated can update product images" on storage.objects;
-create policy "Authenticated can update product images"
+drop policy if exists "Admins can update product images" on storage.objects;
+create policy "Admins can update product images"
   on storage.objects for update
   to authenticated
-  using (bucket_id = 'products');
+  using (bucket_id = 'products' and public.is_admin())
+  with check (bucket_id = 'products' and public.is_admin());
 
-drop policy if exists "Authenticated can delete product images" on storage.objects;
-create policy "Authenticated can delete product images"
+drop policy if exists "Admins can delete product images" on storage.objects;
+create policy "Admins can delete product images"
   on storage.objects for delete
   to authenticated
-  using (bucket_id = 'products');
+  using (bucket_id = 'products' and public.is_admin());
 
 -- Orders table (tracks buyer purchases and Stellar payments)
 create table if not exists public.orders (
@@ -120,4 +149,3 @@ create policy "Users can insert orders"
   on public.orders for insert
   to authenticated, anon
   with check (true);
-
