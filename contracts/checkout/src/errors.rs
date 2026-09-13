@@ -14,8 +14,14 @@ pub enum Error {
     OrderAlreadyPaid = 4,
     /// The token contract is not on the merchant's approved list.
     TokenNotAllowed = 5,
-    /// No order exists for the given order id.
+    /// No merchant-authorized pending order exists for the given order id.
     OrderNotFound = 6,
     /// The order is not in a state that allows this transition.
     InvalidOrderStatus = 7,
+    /// The order id has already been reserved and cannot be reused.
+    OrderAlreadyExists = 8,
+    /// The merchant-authorized quote is no longer payable.
+    QuoteExpired = 9,
+    /// Buyer, token, or amount differs from the merchant-authorized quote.
+    QuoteMismatch = 10,
 }
