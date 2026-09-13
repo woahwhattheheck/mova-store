@@ -38,7 +38,7 @@ export interface PayOptions {
 export interface PayResult {
   hash: string;
   status: string;
-  receipt: PaymentReceipt | null;
+  receipt: PaymentReceipt;
   amountUsd: number;
   amountRaw: bigint;
   /** Pre-flight simulation details (see lib/stellar/simulate.ts). */
@@ -47,6 +47,13 @@ export interface PayResult {
     recommendedInclusionFeeStroops: string;
     instructions: number;
   };
+}
+
+export interface ExpectedPaymentReceipt {
+  contractId: string;
+  tokenContractId: string;
+  orderIdHex: string;
+  amountRaw: bigint;
 }
 
 function status(s: string): void {
@@ -74,8 +81,49 @@ export async function orderIdHash(orderId: string): Promise<string> {
 }
 
 /**
+ * Successful transaction status alone is not payment authority. Require the
+ * checkout contract to emit the exact token/order/amount receipt we intended.
+ */
+export function assertExactPaymentReceipt(
+  receipt: PaymentReceipt | null,
+  expected: ExpectedPaymentReceipt
+): PaymentReceipt {
+  if (!receipt) {
+    throw new WalletError(
+      "Transaction succeeded but no checkout payment receipt was found.",
+      "PAYMENT_RECEIPT_MISSING"
+    );
+  }
+
+  let actualAmount: bigint;
+  try {
+    actualAmount = BigInt(receipt.amount ?? "");
+  } catch {
+    throw new WalletError(
+      "Transaction payment receipt contained an invalid amount.",
+      "PAYMENT_RECEIPT_MISMATCH"
+    );
+  }
+
+  const exactMatch =
+    receipt.contractId === expected.contractId &&
+    receipt.token === expected.tokenContractId &&
+    receipt.orderId?.toLowerCase() === expected.orderIdHex.toLowerCase() &&
+    actualAmount === expected.amountRaw;
+
+  if (!exactMatch) {
+    throw new WalletError(
+      "Transaction succeeded but the checkout payment receipt did not match this order.",
+      "PAYMENT_RECEIPT_MISMATCH"
+    );
+  }
+
+  return receipt;
+}
+
+/**
  * Main flow: connect wallet -> readiness checks -> simulate -> prepare ->
- * sign -> submit -> wait -> decode event.
+ * sign -> submit -> wait -> decode + verify the exact payment receipt.
  */
 export async function payWithStellar(options: PayOptions): Promise<PayResult> {
   const { amountUsd, orderId, publicKey, onStatus = status } = options;
@@ -90,6 +138,7 @@ export async function payWithStellar(options: PayOptions): Promise<PayResult> {
 
   const amountRaw = usdToRawUnits(amountUsd);
   const orderBytes = await hashOrderId(orderId);
+  const orderIdHex = bytesToHex(orderBytes);
 
   // 1. Network guard.
   onStatus("Checking Freighter network…");
@@ -153,9 +202,14 @@ export async function payWithStellar(options: PayOptions): Promise<PayResult> {
     onStatus("Confirming transaction…");
   }
 
-  // 7. Wait for final state and decode the payment event.
+  // 7. Wait for final state, then bind success to the exact payment event.
   const txResult = await waitForTransaction(sendResponse.hash);
-  const receipt = decodePaymentEvent(txResult);
+  const receipt = assertExactPaymentReceipt(decodePaymentEvent(txResult), {
+    contractId: CHECKOUT_CONTRACT_ID,
+    tokenContractId: token.contractId,
+    orderIdHex,
+    amountRaw,
+  });
 
   return {
     hash: sendResponse.hash,
