@@ -7,20 +7,31 @@
 #   - Stellar CLI                   (brew install stellar-cli, or see
 #                                    https://github.com/stellar/stellar-cli)
 #   - A funded testnet keypair      (stellar keys generate --fund)
+#   - A dedicated quote signer public key as 64 hex chars
 #
 # Usage:
-#   scripts/deploy-testnet.sh [MERCHANT_G_ADDRESS]
+#   CHECKOUT_QUOTE_SIGNER_HEX=<64-hex-public-key> scripts/deploy-testnet.sh [MERCHANT_G_ADDRESS]
+#   scripts/deploy-testnet.sh [MERCHANT_G_ADDRESS] <64-hex-public-key>
 #
-# If no merchant address is given, the script uses the deploying account's
-# public key as the merchant. After initialize it whitelists USDC and native
-# XLM so payments with either token are accepted.
+# The quote signer is NOT the merchant/admin wallet. Only its raw 32-byte
+# Ed25519 public key is written on-chain; the matching secret seed belongs only
+# in the server's CHECKOUT_QUOTE_SIGNING_SECRET environment variable.
 
 set -euo pipefail
 
 NETWORK="${STELLAR_NETWORK:-testnet}"
 SOURCE_ACCOUNT="${STELLAR_SOURCE_ACCOUNT:-alice}"
 CONTRACT_DIR="contracts/checkout"
-MERCHANT="${1:-$(stellar keys address "${SOURCE_ACCOUNT}")}"
+DEPLOYER="$(stellar keys address "${SOURCE_ACCOUNT}")"
+MERCHANT="${1:-${DEPLOYER}}"
+QUOTE_SIGNER_HEX="${2:-${CHECKOUT_QUOTE_SIGNER_HEX:-}}"
+
+if [[ ! "${QUOTE_SIGNER_HEX}" =~ ^[0-9A-Fa-f]{64}$ ]]; then
+  echo "error: provide CHECKOUT_QUOTE_SIGNER_HEX as exactly 64 hex characters (raw Ed25519 public key)" >&2
+  exit 2
+fi
+
+QUOTE_SIGNER_HEX="${QUOTE_SIGNER_HEX,,}"
 
 echo "==> Building contract (wasm32v1-none)…"
 (cd "${CONTRACT_DIR}" && cargo build --target wasm32v1-none --release)
@@ -39,14 +50,23 @@ CONTRACT_ID=$(stellar contract deploy \
   --alias movastore_checkout)
 echo "    contract id: ${CONTRACT_ID}"
 
-echo "==> Initializing with merchant ${MERCHANT}…"
+echo "==> Initializing under deployer ${DEPLOYER}…"
 stellar contract invoke \
   --id "${CONTRACT_ID}" \
   --source-account "${SOURCE_ACCOUNT}" \
   --network "${NETWORK}" \
   -- \
   initialize \
-  --merchant "${MERCHANT}"
+  --merchant "${DEPLOYER}"
+
+echo "==> Configuring dedicated checkout quote signer…"
+stellar contract invoke \
+  --id "${CONTRACT_ID}" \
+  --source-account "${SOURCE_ACCOUNT}" \
+  --network "${NETWORK}" \
+  -- \
+  set_quote_signer \
+  --signer "${QUOTE_SIGNER_HEX}"
 
 # Whitelist the default supported tokens (testnet USDC SAC + native XLM SAC).
 # Override with TESTNET_USDC_CONTRACT_ID / TESTNET_NATIVE_CONTRACT_ID.
@@ -71,6 +91,18 @@ stellar contract invoke \
   add_token \
   --token "${NATIVE_CONTRACT}"
 
+if [[ "${MERCHANT}" != "${DEPLOYER}" ]]; then
+  echo "==> Transferring merchant authority to ${MERCHANT}…"
+  stellar contract invoke \
+    --id "${CONTRACT_ID}" \
+    --source-account "${SOURCE_ACCOUNT}" \
+    --network "${NETWORK}" \
+    -- \
+    set_merchant \
+    --new_merchant "${MERCHANT}"
+fi
+
 echo
-echo "Done. Add this to your .env.local:"
+echo "Done. Add this contract id to .env.local:"
 echo "  NEXT_PUBLIC_CHECKOUT_CONTRACT_ID=${CONTRACT_ID}"
+echo "Keep CHECKOUT_QUOTE_SIGNING_SECRET server-only and verify its public key matches CHECKOUT_QUOTE_SIGNER_HEX."
