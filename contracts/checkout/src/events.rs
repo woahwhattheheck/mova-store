@@ -22,25 +22,27 @@ pub struct PaymentReceived {
     pub amount: i128,
 }
 
-/// Emitted when a buyer registers an order before paying.
+/// Emitted when the merchant-authorized quote signer registers a pending order.
 ///
 /// Topics: `create_order`, token, buyer, order_id
-/// Data:   `{ amount, timestamp }`
+/// Data:   `{ amount, timestamp, expires_at }`
 #[contractevent]
 pub struct OrderCreated {
-    /// The SEP-41 token the buyer intends to pay with.
+    /// The SEP-41 token the buyer is authorized to pay with.
     #[topic]
     pub token: Address,
-    /// The buyer that will fund the order.
+    /// The buyer authorized to fund the order.
     #[topic]
     pub buyer: Address,
-    /// The 32-byte order id.
+    /// The immutable 32-byte order id.
     #[topic]
     pub order_id: BytesN<32>,
-    /// The intended amount, in raw token units.
+    /// The exact amount, in raw token units.
     pub amount: i128,
     /// Ledger timestamp of creation.
     pub timestamp: u64,
+    /// Last timestamp at which the pending quote can be paid.
+    pub expires_at: u64,
 }
 
 /// Emitted when the merchant dispatches an order and the escrow is released.
