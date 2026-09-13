@@ -15,9 +15,10 @@ use crate::events::{OrderCreated, OrderRefunded, OrderShipped, PaymentReceived};
 use crate::order::{Order, Status};
 pub use crate::quote::QuoteLine;
 use crate::storage::{
-    get_admin, get_order, get_product_price, get_quote_expiry, has_admin, is_token_allowed,
-    remove_product_price as delete_product_price, set_admin, set_order,
-    set_product_price as write_product_price, set_quote_expiry, set_token_allowed,
+    get_admin, get_order, get_product_price, get_quote_expiry, get_quote_signer, has_admin,
+    is_token_allowed, remove_product_price as delete_product_price, set_admin, set_order,
+    set_product_price as write_product_price, set_quote_expiry,
+    set_quote_signer as write_quote_signer, set_token_allowed,
 };
 
 /// Quotes are intentionally short-lived so a stale browser session cannot lock
@@ -33,17 +34,23 @@ pub struct Checkout;
 impl Checkout {
     /// Initialize the contract with the merchant's Stellar public key.
     /// The merchant address must authorize this call (deployer signs).
+    ///
+    /// The merchant is also the initial quote signer. Production deployments
+    /// can rotate quote registration to a dedicated server-side signer so the
+    /// escrow/admin key never has to live in the web tier.
     pub fn initialize(env: Env, merchant: Address) -> Result<(), Error> {
         if has_admin(&env) {
             return Err(Error::AlreadyInitialized);
         }
         merchant.require_auth();
         set_admin(&env, &merchant);
+        write_quote_signer(&env, &merchant);
         Ok(())
     }
 
     /// Change the merchant wallet that owns the contract.
-    /// Only the current merchant can authorize this.
+    /// Only the current merchant can authorize this. The quote signer is kept
+    /// independent and is not implicitly rotated by this operation.
     pub fn set_merchant(env: Env, new_merchant: Address) -> Result<(), Error> {
         let admin = get_admin(&env)?;
         admin.require_auth();
@@ -54,6 +61,22 @@ impl Checkout {
     /// Read the merchant wallet that owns the contract.
     pub fn merchant(env: Env) -> Result<Address, Error> {
         get_admin(&env)
+    }
+
+    /// Rotate the account authorized to register pending quotes. Only the
+    /// merchant/admin can rotate this key. The signer authorizes quote creation
+    /// but never supplies catalog prices: the contract still re-computes the
+    /// exact amount from merchant-controlled product/token prices.
+    pub fn set_quote_signer(env: Env, new_signer: Address) -> Result<(), Error> {
+        let admin = get_admin(&env)?;
+        admin.require_auth();
+        write_quote_signer(&env, &new_signer);
+        Ok(())
+    }
+
+    /// Read the account currently authorized to register pending quotes.
+    pub fn quote_signer(env: Env) -> Result<Address, Error> {
+        get_quote_signer(&env)
     }
 
     /// Approve a SEP-41 token contract for payments. Only the merchant can
@@ -119,12 +142,14 @@ impl Checkout {
         get_product_price(&env, &product_id, &token)
     }
 
-    /// Create a pending quote from canonical product ids + quantities only.
+    /// Register a pending quote from canonical product ids + quantities only.
     ///
-    /// The buyer authorizes quote creation, but has no price input. Unit prices
-    /// are resolved from the merchant-authoritative on-chain catalog and the
-    /// resulting buyer/token/amount/expiry tuple is persisted immutably under
-    /// `order_id`. This makes browser/localStorage prices advisory only.
+    /// The configured quote signer authorizes creation. The caller has no
+    /// price input: unit prices are resolved from the merchant-controlled
+    /// on-chain catalog and the resulting buyer/token/amount/expiry tuple is
+    /// persisted immutably under `order_id`. This makes browser/localStorage
+    /// prices advisory only while keeping quote-registration authority off the
+    /// public client.
     ///
     /// Returns the exact raw-token amount that `pay` will later require.
     pub fn create_quote(
@@ -134,7 +159,8 @@ impl Checkout {
         token: Address,
         lines: Vec<QuoteLine>,
     ) -> Result<i128, Error> {
-        buyer.require_auth();
+        let signer = get_quote_signer(&env)?;
+        signer.require_auth();
 
         if !is_token_allowed(&env, &token) {
             return Err(Error::TokenNotAllowed);
