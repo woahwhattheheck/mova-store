@@ -2,7 +2,7 @@ use soroban_sdk::{contracttype, Address};
 
 /// Lifecycle of an order.
 ///
-/// * `Pending`  - buyer called `create_order`; nothing escrowed yet.
+/// * `Pending`  - merchant-authorized quote exists; nothing escrowed yet.
 /// * `Paid`     - `pay` escrowed funds into the contract (buyer -> contract).
 /// * `Shipped`  - merchant called `dispatch`; escrow released (contract -> merchant).
 /// * `Refunded` - merchant called `refund`; escrow returned (contract -> buyer).
@@ -15,18 +15,21 @@ pub enum Status {
     Refunded = 3,
 }
 
-/// An on-chain order record.
+/// An on-chain order record. Pending records are immutable merchant-authorized
+/// quotes: buyer, token, amount and expiry must all match when payment arrives.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 pub struct Order {
     /// The address that funded (or will fund) the order.
     pub buyer: Address,
-    /// The amount escrowed, in raw token units.
+    /// The merchant-authorized amount, in raw token units.
     pub amount: i128,
-    /// The SEP-41 token contract used to settle the order.
+    /// The merchant-authorized SEP-41 token contract.
     pub token: Address,
     /// Ledger timestamp of the last status transition.
     pub timestamp: u64,
+    /// Last timestamp at which a Pending quote may be paid.
+    pub expires_at: u64,
     /// Current lifecycle state.
     pub status: Status,
 }
