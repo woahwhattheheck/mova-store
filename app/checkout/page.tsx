@@ -1,162 +1,151 @@
 "use client";
-import { useState, useEffect } from "react";
 
-import Toast from "../../components/Toast";
-import useToast from "../../hooks/useToast";
+import { useEffect, useState } from "react";
+import Link from "next/link";
 import { AiOutlineLoading3Quarters } from "react-icons/ai";
 import { MdArrowBack } from "react-icons/md";
-import Link from "next/link";
-import {
-  FaCcVisa,
-  FaCcMastercard,
-  FaCcPaypal,
-  FaCcStripe,
-  FaCcApplePay,
-  FaCcAmex,
-  FaCcDiscover,
-  FaGooglePay,
-  FaCcAmazonPay,
-  FaCreditCard,
-} from "react-icons/fa";
-import { BsBank, BsCalendarDate } from "react-icons/bs";
-import { SiKlarna } from "react-icons/si";
-import sendMail from "../../lib/sendmail";
-import { validateOTP } from "../../lib/validation";
-import StellarCheckoutButton from "../../components/StellarCheckoutButton";
-import StellarWalletButton from "../../components/StellarWalletButton";
-import StellarOrderWatch from "../../components/StellarOrderWatch";
 import { SiStellar } from "react-icons/si";
-import {
-  validateEmail,
-  validateName,
-  validateAddress,
-  validateCardNumber,
-  validateCardExpiry,
-  validateCardCVV,
-} from "../../lib/validation";
+
+import StellarCheckoutButton from "../../components/StellarCheckoutButton";
+import StellarOrderWatch from "../../components/StellarOrderWatch";
+import StellarWalletButton from "../../components/StellarWalletButton";
+import Toast from "../../components/Toast";
+import useToast from "../../hooks/useToast";
+import sendMail from "../../lib/sendmail";
+import { validateAddress, validateEmail, validateName, validateOTP } from "../../lib/validation";
 
 const Checkout = () => {
-  // OTP is stored as a zero-padded 6-digit string so it always matches the format
-  // shown in the email (e.g. "000042") and can be compared with exact string
-  // equality instead of a loose numeric parse.
-  const [otp, setOtp] = useState<string>(() =>
+  const [otp] = useState<string>(() =>
     String(Math.floor(Math.random() * 1000000)).padStart(6, "0")
   );
   const [totalPrice, setTotalPrice] = useState(0);
   const [cartItems, setCartItems] = useState<any[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
-  const { toast, showToast, hideToast } = useToast(5000);
   const [stage, setStage] = useState(1);
   const [isOtpSending, setIsOtpSending] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [enteredOtp, setEnteredOtp] = useState("");
+  const [paymentComplete, setPaymentComplete] = useState(false);
+  const { toast, showToast, hideToast } = useToast(5000);
   const [formData, setFormData] = useState({
     firstName: "",
     lastName: "",
     email: "",
     address: "",
-    cardNumber: "",
-    expiryDate: "",
-    cvv: "",
-    subject: "YOUR ORDER CONFIRMATION",
+    subject: "MOVA STORE CHECKOUT VERIFICATION",
   });
 
   const [orderId] = useState(() => `SS-${Date.now()}-${Math.floor(Math.random() * 1e6)}`);
 
-  const handleStellarSuccess = (result: { amountUsd: number | string }) => {
-    showToast(`USDC payment received ✓ $${Number(result.amountUsd).toFixed(2)} · order ${orderId}`);
-    setStage(3);
+  const clearPaidCart = () => {
     localStorage.removeItem("cartItems");
     localStorage.removeItem("itemCount");
     localStorage.removeItem("totalPrice");
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setFormData((prevData) => ({ ...prevData, [name]: value }));
+  const completePaidOrder = (message: string) => {
+    if (paymentComplete) return;
+    clearPaidCart();
+    setPaymentComplete(true);
+    showToast(message);
   };
 
-  const handleOtpChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setEnteredOtp(e.target.value);
+  const handleStellarSuccess = (result: { amountUsd: number | string }) => {
+    completePaidOrder(
+      `USDC payment received ✓ $${Number(result.amountUsd).toFixed(2)} · order ${orderId}`
+    );
   };
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
+  const handleObservedPayment = () => {
+    completePaidOrder(`USDC payment detected on-chain ✓ · order ${orderId}`);
+  };
+
+  const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = event.target;
+    setFormData((previous) => ({ ...previous, [name]: value }));
+  };
+
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
     if (isSubmitting) return;
+
+    const firstName = validateName(formData.firstName, "First name");
+    const lastName = validateName(formData.lastName, "Last name");
+    const email = validateEmail(formData.email);
+    const address = validateAddress(formData.address);
+    const invalid = [firstName, lastName, email, address].find((result) => !result.isValid);
+
+    if (invalid) {
+      showToast(invalid.error || "Please check your contact information.");
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       await sendMail({
-        name: `${formData.firstName} ${formData.lastName}`,
-        email: formData.email,
-        message: `You are about to checkout your cart on Mova Store. Your OTP is: ${otp}`,
-        recipientEmail: formData.email,
+        name: `${firstName.sanitized} ${lastName.sanitized}`,
+        email: email.sanitized || formData.email,
+        message: `Verify your Mova Store checkout email with this OTP: ${otp}. This code does not authorize a payment.`,
+        recipientEmail: email.sanitized || formData.email,
         subject: formData.subject,
       });
-
+      setFormData((previous) => ({
+        ...previous,
+        firstName: firstName.sanitized || previous.firstName,
+        lastName: lastName.sanitized || previous.lastName,
+        email: email.sanitized || previous.email,
+        address: address.sanitized || previous.address,
+      }));
       setStage(2);
-      showToast("Form submitted successfully. OTP has been sent to your email.");
-    } catch (error) {
+      showToast("Verification code sent. Payment has not been taken yet.");
+    } catch {
+      showToast("Failed to send the verification code. Please try again.");
+    } finally {
       setIsSubmitting(false);
-      showToast("Failed to send OTP. Please try again.");
     }
   };
 
-  const handleEmailConfirmationSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
+  const handleEmailConfirmationSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
     if (isOtpSending) return;
     setIsOtpSending(true);
-    // Validate the raw trimmed input as a 6-digit code, then compare it against the
-    // zero-padded OTP with exact string equality. We deliberately compare the raw
-    // input rather than validateOTP's sanitized value, because the validator strips
-    // non-digits ("000042abc" -> "000042") and would otherwise let digits-followed-
-    // by-junk through.
+
     const entered = enteredOtp.trim();
     const { isValid } = validateOTP(entered);
     if (isValid && entered === otp) {
-      setStage(3);
-      localStorage.removeItem("cartItems");
-      localStorage.removeItem("itemCount");
-      localStorage.removeItem("totalPrice");
-      showToast("OTP confirmed successfully.");
-    } else {
       setIsOtpSending(false);
-      showToast("Incorrect OTP. Please try again.");
+      setStage(3);
+      showToast("Email verified. Complete payment with Stellar USDC.");
+      return;
     }
+
+    setIsOtpSending(false);
+    showToast("Incorrect OTP. Please try again.");
   };
 
   const handleGoBack = () => {
-    if (stage > 1) {
-      setStage(stage - 1);
+    if (stage > 1 && !paymentComplete) {
+      setStage((current) => current - 1);
       setIsSubmitting(false);
+      setIsOtpSending(false);
     }
   };
 
   useEffect(() => {
     try {
       const storedItems = JSON.parse(localStorage.getItem("cartItems") || "[]");
-      const storedTotalPrice = localStorage.getItem("totalPrice");
-      if (Array.isArray(storedItems)) {
-        setCartItems(storedItems);
-      }
-      if (storedTotalPrice) {
-        setTotalPrice(parseFloat(storedTotalPrice));
-      }
+      const storedTotalPrice = Number.parseFloat(localStorage.getItem("totalPrice") || "0");
+      setCartItems(Array.isArray(storedItems) ? storedItems : []);
+      setTotalPrice(Number.isFinite(storedTotalPrice) && storedTotalPrice > 0 ? storedTotalPrice : 0);
     } catch {
       setCartItems([]);
+      setTotalPrice(0);
     } finally {
       setIsLoaded(true);
     }
   }, []);
 
-  const isEmptyCart = isLoaded && (cartItems.length === 0 || totalPrice <= 0);
-
-  useEffect(() => {
-    if (stage === 3) {
-      localStorage.removeItem("totalPrice");
-      localStorage.removeItem("itemCount");
-      localStorage.removeItem("cartItems");
-    }
-  }, [stage]);
+  const isEmptyCart = isLoaded && !paymentComplete && (cartItems.length === 0 || totalPrice <= 0);
 
   if (isEmptyCart) {
     return (
@@ -178,279 +167,127 @@ const Checkout = () => {
 
   return (
     <>
-      <div className="flex justify-center items-center space-x-2 my-4 sm:mx-0 mx-4 mt-16">
-        <span
-          className={`flex justify-center items-center w-8 h-8 sm:w-10 sm:h-10 border border-purple-700 rounded-full ${
-            stage >= 1 ? "bg-purple-700 text-white" : "bg-white"
-          }`}
-        >
-          1
-        </span>
-        <span className={`w-20 h-1 sm:w-96 ${stage >= 2 ? "bg-purple-700" : "bg-gray-200"}`}></span>
-        <span
-          className={`flex justify-center items-center w-8 h-8 sm:w-10 sm:h-10 border border-purple-700 rounded-full ${
-            stage >= 2 ? "bg-purple-700 text-white" : "bg-white"
-          }`}
-        >
-          2
-        </span>
-        <span className={`w-20 h-1 sm:w-96 ${stage >= 3 ? "bg-purple-700" : "bg-gray-200"}`}></span>
-        <span
-          className={`flex justify-center items-center w-8 h-8 sm:w-10 sm:h-10 border border-purple-700 rounded-full ${
-            stage >= 3 ? "bg-purple-700 text-white" : "bg-white"
-          }`}
-        >
-          3
-        </span>
+      <div className="flex justify-center items-center space-x-2 my-4 sm:mx-0 mx-4 mt-16" aria-label="Checkout progress">
+        {[1, 2, 3].map((step, index) => (
+          <div className="contents" key={step}>
+            {index > 0 && (
+              <span className={`w-20 h-1 sm:w-96 ${stage >= step ? "bg-purple-700" : "bg-gray-200"}`} />
+            )}
+            <span
+              className={`flex justify-center items-center w-8 h-8 sm:w-10 sm:h-10 border border-purple-700 rounded-full ${
+                stage >= step ? "bg-purple-700 text-white" : "bg-white"
+              }`}
+              aria-label={`Step ${step}`}
+            >
+              {step}
+            </span>
+          </div>
+        ))}
       </div>
 
       <div className="container mx-auto px-4 py-4 my-10 w-full bg-purple-400 rounded-md border-2 border-purple-700">
         <div className="flex flex-wrap -mx-4">
-          <div className="w-full md:w-1/2 px-4 mb-4 md:mb-0 p-4 rounded-md grid grid-cols-3 justify-center items-center">
-            <FaCcVisa size={70} />
-            <FaCcMastercard size={70} />
-            <FaCcPaypal size={70} />
-            <FaCcStripe size={70} />
-            <BsBank size={70} />
-            <FaCcAmex size={70} />
-            <FaCcDiscover size={70} />
-            <FaCcApplePay size={70} />
-            <FaGooglePay size={70} />
-            <FaCcAmazonPay size={70} />
-            <SiKlarna size={70} />
+          <div className="w-full md:w-1/2 px-8 py-10 flex flex-col justify-center items-center text-center gap-5">
+            <SiStellar size={92} className="text-purple-900" aria-hidden="true" />
+            <div>
+              <h2 className="text-2xl font-bold text-purple-950">Verified checkout, real payment</h2>
+              <p className="mt-3 text-purple-950 max-w-md">
+                Email verification confirms where we can reach you. It never counts as payment.
+                Your order completes only after the matching Stellar USDC payment is confirmed.
+              </p>
+            </div>
+            <div className="bg-white/80 border border-purple-700/30 rounded-md p-4 max-w-md text-sm text-gray-700">
+              Mova Store does not collect card numbers or CVVs in this checkout. A card rail should
+              only be offered when a real payment processor can authorize and capture it.
+            </div>
           </div>
+
           <div className="w-full md:w-1/2 px-4 p-4 rounded-md">
             {stage === 1 && (
               <form onSubmit={handleSubmit} className="bg-white p-4 rounded shadow-md">
-                <h2 className="text-2xl mb-4 text-center">Checkout</h2>
+                <h2 className="text-2xl mb-2 text-center">Contact details</h2>
+                <p className="text-sm text-gray-600 mb-4 text-center">
+                  Verify your email first. No payment is taken at this step.
+                </p>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                   <div className="mb-4">
-                    <label className="block text-gray-700">First Name</label>
-                    <input
-                      type="text"
-                      name="firstName"
-                      value={formData.firstName}
-                      onChange={handleChange}
-                      required
-                      className="w-full sm:w-64 lg:w-full px-3 py-2 border rounded"
-                    />
+                    <label htmlFor="firstName" className="block text-gray-700">First Name</label>
+                    <input id="firstName" type="text" name="firstName" value={formData.firstName} onChange={handleChange} required autoComplete="given-name" className="w-full px-3 py-2 border rounded" />
                   </div>
                   <div className="mb-4">
-                    <label className="block text-gray-700">Last Name</label>
-                    <input
-                      type="text"
-                      name="lastName"
-                      value={formData.lastName}
-                      onChange={handleChange}
-                      required
-                      className="w-full sm:w-64 lg:w-full px-3 py-2 border rounded"
-                    />
+                    <label htmlFor="lastName" className="block text-gray-700">Last Name</label>
+                    <input id="lastName" type="text" name="lastName" value={formData.lastName} onChange={handleChange} required autoComplete="family-name" className="w-full px-3 py-2 border rounded" />
                   </div>
                   <div className="mb-4">
-                    <label className="block text-gray-700">Email</label>
-                    <input
-                      type="email"
-                      name="email"
-                      value={formData.email}
-                      onChange={handleChange}
-                      required
-                      className="w-full sm:w-64 lg:w-full px-3 py-2 border rounded"
-                    />
+                    <label htmlFor="email" className="block text-gray-700">Email</label>
+                    <input id="email" type="email" name="email" value={formData.email} onChange={handleChange} required autoComplete="email" className="w-full px-3 py-2 border rounded" />
                   </div>
                   <div className="mb-4">
-                    <label className="block text-gray-700">Address</label>
-                    <input
-                      type="text"
-                      name="address"
-                      value={formData.address}
-                      onChange={handleChange}
-                      required
-                      className="w-full sm:w-64 lg:w-full px-3 py-2 border rounded"
-                    />
-                  </div>
-                  <div className="mb-4">
-                    <label className="block text-gray-700">Card Number</label>
-                    <div className="relative flex justify-center items-center">
-                      <input
-                        type="text"
-                        name="cardNumber"
-                        value={formData.cardNumber}
-                        onChange={(e) => {
-                          let { value } = e.target;
-                          value = value.replace(/\s+/g, "").replace(/[^0-9]/g, "");
-                          if (value.length > 19) {
-                            value = value.slice(0, 19);
-                          }
-                          setFormData((prevData) => ({
-                            ...prevData,
-                            cardNumber: value,
-                          }));
-                        }}
-                        maxLength={19}
-                        placeholder="16-digit card number"
-                        required
-                        className="w-full sm:w-64 lg:w-full px-3 py-2 border rounded"
-                      />
-                      <FaCreditCard className="absolute top-1/2 right-8 transform -translate-y-1/2 text-gray-500" />
-                    </div>
-                  </div>
-                  <div className="mb-4">
-                    <label className="block text-gray-700">Expiry Date</label>
-                    <div className="relative flex justify-center items-center">
-                      <input
-                        type="text"
-                        name="expiryDate"
-                        value={formData.expiryDate}
-                        onChange={(e) => {
-                          let { value } = e.target;
-                          value = value.replace(/[^0-9/]/g, "");
-                          if (
-                            value.length === 2 &&
-                            !value.includes("/") &&
-                            formData.expiryDate.length === 1
-                          ) {
-                            value = value + "/";
-                          }
-                          if (value.length > 5) {
-                            value = value.slice(0, 5);
-                          }
-                          setFormData((prevData) => ({
-                            ...prevData,
-                            expiryDate: value,
-                          }));
-                        }}
-                        placeholder="MM/YY"
-                        maxLength={5}
-                        className="w-full sm:w-64 lg:w-full px-3 py-2 border rounded"
-                        required
-                      />
-                      <BsCalendarDate className="absolute top-1/2 right-8 transform -translate-y-1/2 text-gray-500" />
-                    </div>
-                  </div>
-
-                  <div className="mb-4">
-                    <label className="block text-gray-700">Cvv</label>
-                    <div className="relative flex justify-center items-center">
-                      <input
-                        type="text"
-                        name="cvv"
-                        value={formData.cvv}
-                        onChange={(e) => {
-                          let { value } = e.target;
-                          value = value.replace(/[^0-9]/g, "");
-                          if (value.length > 4) {
-                            value = value.slice(0, 4);
-                          }
-                          setFormData((prevData) => ({
-                            ...prevData,
-                            cvv: value,
-                          }));
-                        }}
-                        placeholder="3 or 4 digits"
-                        maxLength={4}
-                        required
-                        className="w-full sm:w-64 lg:w-full px-3 py-2 border rounded"
-                      />
-                      <FaCreditCard className="absolute top-1/2 right-8 transform -translate-y-1/2 text-gray-500" />
-                    </div>
+                    <label htmlFor="address" className="block text-gray-700">Address</label>
+                    <input id="address" type="text" name="address" value={formData.address} onChange={handleChange} required autoComplete="street-address" className="w-full px-3 py-2 border rounded" />
                   </div>
                 </div>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="w-full flex justify-center items-center bg-purple-500 text-white py-2 rounded hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
+                <button type="submit" disabled={isSubmitting} className="w-full flex justify-center items-center bg-purple-600 text-white py-2 rounded hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                   {isSubmitting ? (
-                    <>
-                      <AiOutlineLoading3Quarters className="animate-spin mr-2" />
-                      Submitting...
-                    </>
+                    <><AiOutlineLoading3Quarters className="animate-spin mr-2" />Sending verification code...</>
                   ) : (
-                    "Submit"
+                    "Send verification code"
                   )}
                 </button>
               </form>
             )}
-            {stage === 1 && (
-              <div className="mt-4 bg-white p-4 rounded shadow-md flex flex-col gap-3">
-                <div className="flex items-center gap-3">
-                  <span className="h-px flex-1 bg-gray-300" />
-                  <span className="text-xs uppercase tracking-wider text-gray-500 flex items-center gap-2">
-                    <SiStellar size={16} className="text-purple-600" />
-                    or pay with Stellar (USDC)
-                  </span>
-                  <span className="h-px flex-1 bg-gray-300" />
+
+            {stage === 2 && (
+              <form onSubmit={handleEmailConfirmationSubmit} className="bg-white p-4 rounded shadow-md h-full space-y-8">
+                <div>
+                  <h2 className="text-2xl mb-2 text-center">Verify email</h2>
+                  <p className="text-sm text-gray-600 text-center">
+                    Enter the six-digit code sent to {formData.email}. This verifies contact details only.
+                  </p>
+                </div>
+                <div className="mb-4">
+                  <label htmlFor="otpConfirmation" className="block text-gray-700">Verification code</label>
+                  <input id="otpConfirmation" type="text" name="otpConfirmation" value={enteredOtp} onChange={(event) => setEnteredOtp(event.target.value)} required maxLength={6} inputMode="numeric" pattern="[0-9]{6}" placeholder="000000" className="w-full px-3 py-2 border rounded" />
+                </div>
+                <button type="submit" disabled={isOtpSending} className="w-full bg-purple-600 text-white flex justify-center items-center py-2 rounded hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                  {isOtpSending ? (
+                    <><AiOutlineLoading3Quarters className="animate-spin mr-2" />Verifying...</>
+                  ) : (
+                    "Verify email"
+                  )}
+                </button>
+                <button type="button" onClick={handleGoBack} className="w-full flex justify-center items-center bg-gray-300 text-black py-2 rounded hover:bg-gray-400 transition-colors">
+                  <MdArrowBack className="mr-2" /> Edit contact details
+                </button>
+              </form>
+            )}
+
+            {stage === 3 && !paymentComplete && (
+              <div className="bg-white p-4 rounded shadow-md flex flex-col gap-4">
+                <div className="text-center">
+                  <h2 className="text-2xl font-semibold">Pay with Stellar USDC</h2>
+                  <p className="text-gray-600 mt-1">Amount due: ${totalPrice.toFixed(2)}</p>
+                  <p className="text-xs text-gray-500 mt-1">Order {orderId}</p>
                 </div>
                 <StellarWalletButton />
-                <StellarCheckoutButton
-                  amountUsd={totalPrice}
-                  orderId={orderId}
-                  disabled={isSubmitting || totalPrice <= 0}
-                  onSuccess={handleStellarSuccess}
-                />
-                <StellarOrderWatch orderId={orderId} enabled={stage === 1} />
-                <p className="text-[11px] text-gray-400 text-center">
-                  Order #{orderId} · USDC (testnet) is escrowed by a Soroban smart contract until we
-                  ship, then released to our merchant wallet. Refunds go straight back on-chain. No
-                  card needed.
+                <StellarCheckoutButton amountUsd={totalPrice} orderId={orderId} onSuccess={handleStellarSuccess} />
+                <StellarOrderWatch orderId={orderId} enabled onEvent={handleObservedPayment} />
+                <p className="text-[11px] text-gray-500 text-center">
+                  The order stays open until this exact order ID is confirmed on-chain. Email verification alone never clears your cart.
                 </p>
+                <button type="button" onClick={handleGoBack} className="w-full flex justify-center items-center bg-gray-300 text-black py-2 rounded hover:bg-gray-400 transition-colors">
+                  <MdArrowBack className="mr-2" /> Back to verification
+                </button>
               </div>
             )}
-            {stage === 2 && (
-              <form
-                onSubmit={handleEmailConfirmationSubmit}
-                className="bg-white p-4 rounded shadow-md h-full space-y-12"
-              >
-                <h2 className="text-2xl mb-4 text-center">Confirm OTP</h2>
-                <span className="text-md">An OTP was sent to your email</span>
-                <div className="mb-4">
-                  <label className="block text-gray-700">Please confirm OTP</label>
-                  <input
-                    type="text"
-                    name="otpConfirmation"
-                    value={enteredOtp}
-                    onChange={handleOtpChange}
-                    required
-                    maxLength={6}
-                    inputMode="numeric"
-                    pattern="[0-9]{6}"
-                    placeholder="OTP"
-                    className="w-64 px-3 py-2 border rounded"
-                  />
-                </div>
-                <button
-                  type="submit"
-                  disabled={isOtpSending}
-                  className="w-full bg-purple-500 text-white flex justify-center items-center py-2 rounded hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isOtpSending ? (
-                    <>
-                      <AiOutlineLoading3Quarters className="animate-spin mr-2" />
-                      Confirming...
-                    </>
-                  ) : (
-                    "Confirm"
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleGoBack}
-                  className="w-full flex justify-center items-center bg-gray-300 text-black py-2 rounded mt-4 hover:bg-gray-500 transition-colors"
-                >
-                  <MdArrowBack className="mr-2" />
-                  Go Back
-                </button>
-              </form>
-            )}
-            {stage === 3 && (
-              <div className="bg-white p-4 rounded shadow-md h-full flex flex-col justify-center items-center">
-                <h2 className="text-6xl mb-4 text-center">Order Completed.</h2>
-                <p className="text-center">Your order has been placed successfully.</p>
-                <span className="text-center">Thanks for Shopping with us 🥰🥰🥰</span>
-                <Link
-                  href="/shop"
-                  className="text-center mt-8 py-2 bg-purple-700 hover:bg-purple-500 rounded-md px-2"
-                >
+
+            {paymentComplete && (
+              <div className="bg-white p-6 rounded shadow-md min-h-80 flex flex-col justify-center items-center">
+                <SiStellar size={56} className="text-green-600 mb-4" aria-hidden="true" />
+                <h2 className="text-4xl mb-4 text-center font-bold">Payment confirmed.</h2>
+                <p className="text-center">Your paid order {orderId} is complete.</p>
+                <span className="text-center text-gray-600">Thanks for shopping with us.</span>
+                <Link href="/shop" className="text-center mt-8 py-2 bg-purple-700 text-white hover:bg-purple-600 rounded-md px-4">
                   Back to Shop
                 </Link>
               </div>
