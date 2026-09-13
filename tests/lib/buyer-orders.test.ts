@@ -140,11 +140,80 @@ describe("Buyer Orders Management", () => {
     expect(getCachedBuyerOrders()[0].userId).toBeUndefined();
   });
 
+  it("fails closed on session-resolution errors instead of creating guest-visible history", async () => {
+    mocks.getSession.mockResolvedValueOnce({
+      data: { session: null },
+      error: { message: "auth unavailable" },
+    });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await expect(saveBuyerOrder(sampleOrder)).rejects.toThrow("Could not resolve order ownership");
+
+    expect(mocks.insert).not.toHaveBeenCalled();
+    expect(localStorage.getItem("mova_buyer_orders")).toBeNull();
+    await expect(fetchBuyerOrders(undefined)).resolves.toEqual([]);
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it("fails closed when session lookup throws before ownership can be resolved", async () => {
+    mocks.getSession.mockRejectedValueOnce(new Error("auth transport failed"));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await expect(saveBuyerOrder(sampleOrder)).rejects.toThrow("Could not resolve order ownership");
+
+    expect(mocks.insert).not.toHaveBeenCalled();
+    expect(getCachedBuyerOrders()).toEqual([]);
+    warn.mockRestore();
+  });
+
   it("fetches orders from Supabase when available", async () => {
     const orders = await fetchBuyerOrders("user-123");
     expect(orders.length).toBe(1);
     expect(orders[0].orderId).toBe("SS-DB-1");
     expect(orders[0].total).toBe(120);
+  });
+
+  it("merges identity-matching local-only rows into nonempty remote history", async () => {
+    localStorage.setItem(
+      "mova_buyer_orders",
+      JSON.stringify([
+        {
+          ...sampleOrder,
+          id: "local-only",
+          orderId: "SS-LOCAL",
+          userId: "user-123",
+          userEmail: "buyer@example.com",
+        },
+        {
+          ...sampleOrder,
+          id: "cached-remote-duplicate",
+          orderId: "SS-DB-1",
+          userId: "user-123",
+          userEmail: "buyer@example.com",
+          status: "Shipped",
+        },
+        {
+          ...sampleOrder,
+          id: "foreign",
+          orderId: "SS-FOREIGN",
+          userId: "other-user",
+          userEmail: "other@example.com",
+        },
+        {
+          ...sampleOrder,
+          id: "guest",
+          orderId: "SS-GUEST",
+          userId: undefined,
+          userEmail: undefined,
+        },
+      ])
+    );
+
+    const orders = await fetchBuyerOrders("user-123");
+
+    expect(orders.map((order) => order.orderId)).toEqual(["SS-LOCAL", "SS-DB-1"]);
+    expect(orders.find((order) => order.orderId === "SS-DB-1")?.status).toBe("Paid");
   });
 
   it("falls back to only the signed-in user's explicitly owned cache rows", async () => {

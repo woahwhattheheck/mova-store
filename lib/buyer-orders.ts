@@ -49,9 +49,11 @@ export async function saveBuyerOrder(order: BuyerOrder): Promise<BuyerOrder> {
     }
     sessionUser = data?.session?.user || null;
   } catch (err) {
-    // Session lookup failures must not lose the local order. Treat the write as
-    // guest-local rather than trusting caller-supplied identity fields.
-    console.warn("Could not resolve Supabase session; keeping order device-local:", err);
+    // A failed session lookup is not evidence that the buyer is logged out. If we
+    // classified it as guest, the row would become visible in logged-out history
+    // on this device. Fail before either cache or remote persistence instead.
+    console.warn("Could not resolve Supabase session; refusing to classify order ownership:", err);
+    throw new Error("Could not resolve order ownership");
   }
 
   const cachedOrder: BuyerOrder = sessionUser
@@ -131,6 +133,21 @@ export function getCachedBuyerOrders(): BuyerOrder[] {
   }
 }
 
+function cachedOrdersForIdentity(userEmailOrId?: string): BuyerOrder[] {
+  const cached = getCachedBuyerOrders();
+
+  if (!userEmailOrId) {
+    return cached.filter((order) => !order.userId && !order.userEmail);
+  }
+
+  const normalized = userEmailOrId.toLowerCase();
+  return cached.filter(
+    (order) =>
+      (Boolean(order.userId) && order.userId === userEmailOrId) ||
+      (Boolean(order.userEmail) && order.userEmail?.toLowerCase() === normalized)
+  );
+}
+
 /**
  * Fetches past orders for an authenticated user, or device-local guest orders
  * when no user identity is supplied.
@@ -178,24 +195,18 @@ export async function fetchBuyerOrders(userEmailOrId?: string): Promise<BuyerOrd
     console.warn("Supabase query failed, falling back to cached orders:", err);
   }
 
-  // Fallback to localStorage without crossing identity boundaries. Signed-in
-  // users only see explicitly matching cached ownership; guests only see rows
-  // with no signed-in owner attached.
+  // Always consider identity-matching cached rows. A remote insert can fail after
+  // the local cache succeeds; a later nonempty remote history must not hide that
+  // local-only purchase. Remote rows win duplicate orderIds because they are the
+  // durable database record, while other-account and guest rows remain excluded.
+  const cached = cachedOrdersForIdentity(userEmailOrId);
   if (orders.length === 0) {
-    const cached = getCachedBuyerOrders();
-    if (userEmailOrId) {
-      const normalized = userEmailOrId.toLowerCase();
-      orders = cached.filter(
-        (o) =>
-          (Boolean(o.userId) && o.userId === userEmailOrId) ||
-          (Boolean(o.userEmail) && o.userEmail?.toLowerCase() === normalized)
-      );
-    } else {
-      orders = cached.filter((o) => !o.userId && !o.userEmail);
-    }
+    return cached;
   }
 
-  return orders;
+  const remoteOrderIds = new Set(orders.map((order) => order.orderId));
+  const localOnly = cached.filter((order) => !remoteOrderIds.has(order.orderId));
+  return [...localOnly, ...orders];
 }
 
 /**
