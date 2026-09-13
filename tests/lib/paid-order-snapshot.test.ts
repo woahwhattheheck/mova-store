@@ -87,6 +87,24 @@ describe("paid order fulfillment snapshots", () => {
     expect(getCachedBuyerOrders()).toHaveLength(1);
   });
 
+  it("fails closed for a guest when the device cache cannot persist the paid order", async () => {
+    const storage = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("storage unavailable");
+    });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    try {
+      await expect(
+        savePaidBuyerOrderOnce({ ...baseInput, orderId: "SS-NO-STORAGE" })
+      ).rejects.toThrow(/could not persist paid order details/i);
+      expect(mocks.from).not.toHaveBeenCalled();
+      expect(localStorage.getItem("mova_buyer_orders")).toBeNull();
+    } finally {
+      storage.mockRestore();
+      warn.mockRestore();
+    }
+  });
+
   it("stores signed-in fulfillment context inside a versioned JSON envelope", async () => {
     mocks.getSession.mockResolvedValueOnce({
       data: {
