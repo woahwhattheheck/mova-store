@@ -18,6 +18,10 @@ pub struct ProductPriceKey {
 pub enum DataKey {
     /// The merchant wallet that owns the contract and can dispatch/refund.
     Admin,
+    /// The account authorized to register checkout quotes. This can be a
+    /// dedicated server-side signer so the merchant escrow key never lives in
+    /// the web tier.
+    QuoteSigner,
     /// An order registry entry, keyed by 32-byte order id.
     Order(BytesN<32>),
     /// Expiry timestamp for a merchant-authoritative pending quote.
@@ -46,6 +50,22 @@ pub fn get_admin(env: &Env) -> Result<Address, Error> {
 pub fn set_admin(env: &Env, admin: &Address) {
     env.storage().persistent().set(&DataKey::Admin, admin);
     extend_ttl(env, &DataKey::Admin);
+}
+
+pub fn get_quote_signer(env: &Env) -> Result<Address, Error> {
+    let signer: Option<Address> = env.storage().persistent().get(&DataKey::QuoteSigner);
+    match signer {
+        Some(signer) => {
+            extend_ttl(env, &DataKey::QuoteSigner);
+            Ok(signer)
+        }
+        None => Err(Error::NotInitialized),
+    }
+}
+
+pub fn set_quote_signer(env: &Env, signer: &Address) {
+    env.storage().persistent().set(&DataKey::QuoteSigner, signer);
+    extend_ttl(env, &DataKey::QuoteSigner);
 }
 
 pub fn get_order(env: &Env, order_id: &BytesN<32>) -> Option<Order> {
