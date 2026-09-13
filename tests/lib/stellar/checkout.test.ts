@@ -15,7 +15,12 @@ import * as accountMod from "../../../lib/stellar/account";
 import * as simulateMod from "../../../lib/stellar/simulate";
 import * as eventsMod from "../../../lib/stellar/events";
 import * as configMod from "../../../lib/stellar/config";
-import { usdToRawUnits, orderIdHash, payWithStellar } from "../../../lib/stellar/checkout";
+import {
+  assertExactPaymentReceipt,
+  usdToRawUnits,
+  orderIdHash,
+  payWithStellar,
+} from "../../../lib/stellar/checkout";
 
 describe("usdToRawUnits", () => {
   it("converts a typical USD price to 7-decimal raw units", () => {
@@ -38,19 +43,16 @@ describe("usdToRawUnits", () => {
     ["Infinity", Number.POSITIVE_INFINITY],
   ];
 
-  it.each(cases)(
-    "throws WalletError with code INVALID_AMOUNT for %s",
-    (_label, value) => {
-      let caught: unknown;
-      try {
-        usdToRawUnits(value);
-      } catch (err) {
-        caught = err;
-      }
-      expect(caught).toBeInstanceOf(WalletError);
-      expect((caught as WalletError).code).toBe("INVALID_AMOUNT");
+  it.each(cases)("throws WalletError with code INVALID_AMOUNT for %s", (_label, value) => {
+    let caught: unknown;
+    try {
+      usdToRawUnits(value);
+    } catch (err) {
+      caught = err;
     }
-  );
+    expect(caught).toBeInstanceOf(WalletError);
+    expect((caught as WalletError).code).toBe("INVALID_AMOUNT");
+  });
 });
 
 describe("orderIdHash", () => {
@@ -60,6 +62,45 @@ describe("orderIdHash", () => {
     expect(hash1).toBe(hash2);
     expect(hash1).toHaveLength(64);
     expect(hash1).toMatch(/^[0-9a-f]{64}$/);
+  });
+});
+
+describe("assertExactPaymentReceipt", () => {
+  const expected = {
+    contractId: "CCHECKOUT",
+    tokenContractId: "CUSDC",
+    orderIdHex: "ab".repeat(32),
+    amountRaw: 10_000_000n,
+  };
+  const receipt = {
+    txHash: "tx-1",
+    ledger: 99,
+    contractId: expected.contractId,
+    token: expected.tokenContractId,
+    orderId: expected.orderIdHex,
+    amount: expected.amountRaw.toString(),
+  };
+
+  it("returns the receipt only when contract, token, order and raw amount all match", () => {
+    expect(assertExactPaymentReceipt(receipt, expected)).toEqual(receipt);
+  });
+
+  it("fails closed when a successful transaction has no payment receipt", () => {
+    expect(() => assertExactPaymentReceipt(null, expected)).toThrowError(
+      expect.objectContaining({ code: "PAYMENT_RECEIPT_MISSING" })
+    );
+  });
+
+  it.each([
+    ["contract", { contractId: "COTHER" }],
+    ["token", { token: "CWRONG" }],
+    ["order", { orderId: "cd".repeat(32) }],
+    ["underpayment", { amount: "9999999" }],
+    ["malformed amount", { amount: "10 USDC" }],
+  ])("fails closed on %s mismatch", (_label, patch) => {
+    expect(() => assertExactPaymentReceipt({ ...receipt, ...patch }, expected)).toThrowError(
+      expect.objectContaining({ code: "PAYMENT_RECEIPT_MISMATCH" })
+    );
   });
 });
 
@@ -99,9 +140,11 @@ describe("payWithStellar", () => {
     vi.resetModules();
   });
 
-  it("executes full successful checkout payment flow", async () => {
+  it("executes full successful checkout payment flow with an exact receipt", async () => {
     const tx = buildDummyTx();
     const xdrString = tx.toXDR();
+    const orderId = "ORD-999";
+    const expectedOrderHex = await orderIdHash(orderId);
 
     const ensureNetworkSpy = vi.spyOn(freighterMod, "ensureNetwork").mockResolvedValue();
     const assertPaymentReadySpy = vi.spyOn(accountMod, "assertPaymentReady").mockResolvedValue({
@@ -139,6 +182,9 @@ describe("payWithStellar", () => {
     const decodeSpy = vi.spyOn(eventsMod, "decodePaymentEvent").mockReturnValue({
       txHash: "abc123mocktxhash",
       ledger: 456,
+      contractId: configMod.CHECKOUT_CONTRACT_ID,
+      token: configMod.defaultToken().contractId,
+      orderId: expectedOrderHex,
       amount: "10000000",
       buyer: dummyPublicKey,
     });
@@ -146,7 +192,7 @@ describe("payWithStellar", () => {
     const statusUpdates: string[] = [];
     const result = await payWithStellar({
       amountUsd: 1,
-      orderId: "ORD-999",
+      orderId,
       publicKey: dummyPublicKey,
       onStatus: (s) => statusUpdates.push(s),
     });
@@ -157,7 +203,7 @@ describe("payWithStellar", () => {
     expect(result.amountRaw).toBe(10_000_000n);
     expect(result.simulation.minResourceFeeStroops).toBe("1200");
     expect(result.simulation.recommendedInclusionFeeStroops).toBe("51200");
-    expect(result.receipt?.buyer).toBe(dummyPublicKey);
+    expect(result.receipt.buyer).toBe(dummyPublicKey);
     expect(statusUpdates.length).toBeGreaterThan(0);
 
     ensureNetworkSpy.mockRestore();
