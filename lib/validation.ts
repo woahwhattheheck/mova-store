@@ -238,9 +238,14 @@ export function validateProductName(name: string): ValidationResult {
  * Validates a product price.
  */
 export function validatePrice(price: string | number): ValidationResult {
-  const numPrice = typeof price === "string" ? parseFloat(price) : price;
+  const priceToken = typeof price === "string" ? price.trim() : String(price);
 
-  if (isNaN(numPrice)) {
+  if (!/^-?\d+(?:\.\d{1,2})?$/.test(priceToken)) {
+    return { isValid: false, error: "Please enter a valid price" };
+  }
+
+  const numPrice = Number(priceToken);
+  if (!Number.isFinite(numPrice)) {
     return { isValid: false, error: "Please enter a valid price" };
   }
 
@@ -252,7 +257,6 @@ export function validatePrice(price: string | number): ValidationResult {
     return { isValid: false, error: "Price is too high" };
   }
 
-  // Round to 2 decimal places
   const sanitized = numPrice.toFixed(2);
   return { isValid: true, sanitized };
 }
