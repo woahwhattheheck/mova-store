@@ -12,6 +12,8 @@ import StellarWalletButton from "../../components/StellarWalletButton";
 import Toast from "../../components/Toast";
 import useToast from "../../hooks/useToast";
 import sendMail from "../../lib/sendmail";
+import { usdToRawUnits } from "../../lib/stellar/checkout";
+import { defaultToken } from "../../lib/stellar/config";
 import { validateAddress, validateEmail, validateName, validateOTP } from "../../lib/validation";
 
 const Checkout = () => {
@@ -36,6 +38,8 @@ const Checkout = () => {
   });
 
   const [orderId] = useState(() => `SS-${Date.now()}-${Math.floor(Math.random() * 1e6)}`);
+  const expectedAmountRaw = totalPrice > 0 ? usdToRawUnits(totalPrice).toString() : "";
+  const expectedTokenContractId = defaultToken().contractId;
 
   const clearPaidCart = () => {
     localStorage.removeItem("cartItems");
@@ -271,9 +275,15 @@ const Checkout = () => {
                 </div>
                 <StellarWalletButton />
                 <StellarCheckoutButton amountUsd={totalPrice} orderId={orderId} onSuccess={handleStellarSuccess} />
-                <StellarOrderWatch orderId={orderId} enabled onEvent={handleObservedPayment} />
+                <StellarOrderWatch
+                  orderId={orderId}
+                  expectedAmountRaw={expectedAmountRaw}
+                  expectedTokenContractId={expectedTokenContractId}
+                  enabled
+                  onEvent={handleObservedPayment}
+                />
                 <p className="text-[11px] text-gray-500 text-center">
-                  The order stays open until this exact order ID is confirmed on-chain. Email verification alone never clears your cart.
+                  The order stays open until this exact order ID, USDC token, and raw cart total are confirmed on-chain. Email verification alone never clears your cart.
                 </p>
                 <button type="button" onClick={handleGoBack} className="w-full flex justify-center items-center bg-gray-300 text-black py-2 rounded hover:bg-gray-400 transition-colors">
                   <MdArrowBack className="mr-2" /> Back to verification
