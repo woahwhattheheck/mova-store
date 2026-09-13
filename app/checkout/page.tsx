@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { AiOutlineLoading3Quarters } from "react-icons/ai";
 import { MdArrowBack } from "react-icons/md";
@@ -11,10 +11,18 @@ import StellarOrderWatch from "../../components/StellarOrderWatch";
 import StellarWalletButton from "../../components/StellarWalletButton";
 import Toast from "../../components/Toast";
 import useToast from "../../hooks/useToast";
+import { savePaidBuyerOrderOnce } from "../../lib/buyer-orders";
 import sendMail from "../../lib/sendmail";
 import { usdToRawUnits } from "../../lib/stellar/checkout";
 import { defaultToken } from "../../lib/stellar/config";
 import { validateAddress, validateEmail, validateName, validateOTP } from "../../lib/validation";
+
+interface ConfirmedPayment {
+  amountUsd: number;
+  txHash?: string;
+  ledger?: number;
+  message: string;
+}
 
 const Checkout = () => {
   const [otp] = useState<string>(() =>
@@ -28,6 +36,10 @@ const Checkout = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [enteredOtp, setEnteredOtp] = useState("");
   const [paymentComplete, setPaymentComplete] = useState(false);
+  const [confirmedPayment, setConfirmedPayment] = useState<ConfirmedPayment | null>(null);
+  const [isPersistingPaidOrder, setIsPersistingPaidOrder] = useState(false);
+  const [persistenceError, setPersistenceError] = useState("");
+  const paidOrderPersistenceRef = useRef<Promise<void> | null>(null);
   const { toast, showToast, hideToast } = useToast(5000);
   const [formData, setFormData] = useState({
     firstName: "",
@@ -47,21 +59,75 @@ const Checkout = () => {
     localStorage.removeItem("totalPrice");
   };
 
-  const completePaidOrder = (message: string) => {
-    if (paymentComplete) return;
-    clearPaidCart();
-    setPaymentComplete(true);
-    showToast(message);
+  const persistConfirmedOrder = (confirmation: ConfirmedPayment) => {
+    if (paymentComplete || paidOrderPersistenceRef.current) return;
+
+    setConfirmedPayment((current) => current ?? confirmation);
+    setPersistenceError("");
+    setIsPersistingPaidOrder(true);
+
+    const task = (async () => {
+      try {
+        await savePaidBuyerOrderOnce({
+          orderId,
+          total: confirmation.amountUsd,
+          tokenSymbol: "USDC",
+          tokenAmount: confirmation.amountUsd,
+          txHash: confirmation.txHash,
+          ledger: confirmation.ledger,
+          items: cartItems,
+          fulfillment: {
+            firstName: formData.firstName,
+            lastName: formData.lastName,
+            email: formData.email,
+            address: formData.address,
+          },
+        });
+
+        // Paid cart teardown is deliberately last. If persistence fails, keep
+        // every cart field intact and suppress the payment controls so the buyer
+        // cannot accidentally submit a second payment for the same confirmed order.
+        clearPaidCart();
+        setPaymentComplete(true);
+        showToast(confirmation.message);
+      } catch (err) {
+        console.warn("Payment confirmed but fulfillment snapshot could not be saved:", err);
+        const message =
+          "Payment is confirmed, but your order details could not be saved yet. Do not pay again; retry saving the order below.";
+        setPersistenceError(message);
+        showToast(message);
+      } finally {
+        setIsPersistingPaidOrder(false);
+        if (paidOrderPersistenceRef.current === task) {
+          paidOrderPersistenceRef.current = null;
+        }
+      }
+    })();
+
+    paidOrderPersistenceRef.current = task;
   };
 
-  const handleStellarSuccess = (result: { amountUsd: number | string }) => {
-    completePaidOrder(
-      `USDC payment received ✓ $${Number(result.amountUsd).toFixed(2)} · order ${orderId}`
-    );
+  const handleStellarSuccess = (result: {
+    amountUsd: number | string;
+    hash?: string;
+    receipt?: { ledger?: number };
+  }) => {
+    const amountUsd = Number(result.amountUsd);
+    persistConfirmedOrder({
+      amountUsd,
+      txHash: typeof result.hash === "string" ? result.hash : undefined,
+      ledger: Number.isSafeInteger(result.receipt?.ledger) ? result.receipt?.ledger : undefined,
+      message: `USDC payment received ✓ $${amountUsd.toFixed(2)} · order ${orderId}`,
+    });
   };
 
-  const handleObservedPayment = () => {
-    completePaidOrder(`USDC payment detected on-chain ✓ · order ${orderId}`);
+  const handleObservedPayment = (event?: { txHash?: string; ledger?: number }) => {
+    persistConfirmedOrder({
+      amountUsd: totalPrice,
+      txHash: typeof event?.txHash === "string" ? event.txHash : undefined,
+      ledger: Number.isSafeInteger(event?.ledger) ? event?.ledger : undefined,
+      message: `USDC payment detected on-chain ✓ · order ${orderId}`,
+    });
   };
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -128,7 +194,7 @@ const Checkout = () => {
   };
 
   const handleGoBack = () => {
-    if (stage > 1 && !paymentComplete) {
+    if (stage > 1 && !paymentComplete && !confirmedPayment) {
       setStage((current) => current - 1);
       setIsSubmitting(false);
       setIsOtpSending(false);
@@ -268,26 +334,59 @@ const Checkout = () => {
 
             {stage === 3 && !paymentComplete && (
               <div className="bg-white p-4 rounded shadow-md flex flex-col gap-4">
-                <div className="text-center">
-                  <h2 className="text-2xl font-semibold">Pay with Stellar USDC</h2>
-                  <p className="text-gray-600 mt-1">Amount due: ${totalPrice.toFixed(2)}</p>
-                  <p className="text-xs text-gray-500 mt-1">Order {orderId}</p>
-                </div>
-                <StellarWalletButton />
-                <StellarCheckoutButton amountUsd={totalPrice} orderId={orderId} onSuccess={handleStellarSuccess} />
-                <StellarOrderWatch
-                  orderId={orderId}
-                  expectedAmountRaw={expectedAmountRaw}
-                  expectedTokenContractId={expectedTokenContractId}
-                  enabled
-                  onEvent={handleObservedPayment}
-                />
-                <p className="text-[11px] text-gray-500 text-center">
-                  The order stays open until this exact order ID, USDC token, and raw cart total are confirmed on-chain. Email verification alone never clears your cart.
-                </p>
-                <button type="button" onClick={handleGoBack} className="w-full flex justify-center items-center bg-gray-300 text-black py-2 rounded hover:bg-gray-400 transition-colors">
-                  <MdArrowBack className="mr-2" /> Back to verification
-                </button>
+                {confirmedPayment ? (
+                  <>
+                    <div className="text-center">
+                      <h2 className="text-2xl font-semibold">Payment confirmed on-chain</h2>
+                      <p className="text-gray-600 mt-1">Order {orderId}</p>
+                    </div>
+                    {isPersistingPaidOrder && (
+                      <div className="flex items-center justify-center gap-2 text-purple-700" role="status">
+                        <AiOutlineLoading3Quarters className="animate-spin" />
+                        Saving your paid order details before clearing the cart…
+                      </div>
+                    )}
+                    {persistenceError && (
+                      <div className="border border-amber-300 bg-amber-50 text-amber-900 rounded-md p-4" role="alert">
+                        <p>{persistenceError}</p>
+                        <button
+                          type="button"
+                          onClick={() => persistConfirmedOrder(confirmedPayment)}
+                          disabled={isPersistingPaidOrder}
+                          className="mt-3 w-full bg-purple-700 text-white py-2 rounded hover:bg-purple-800 disabled:opacity-50"
+                        >
+                          Retry saving order details
+                        </button>
+                      </div>
+                    )}
+                    <p className="text-xs text-gray-600 text-center">
+                      The payment controls are locked after confirmation. Do not submit another payment for this order.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <div className="text-center">
+                      <h2 className="text-2xl font-semibold">Pay with Stellar USDC</h2>
+                      <p className="text-gray-600 mt-1">Amount due: ${totalPrice.toFixed(2)}</p>
+                      <p className="text-xs text-gray-500 mt-1">Order {orderId}</p>
+                    </div>
+                    <StellarWalletButton />
+                    <StellarCheckoutButton amountUsd={totalPrice} orderId={orderId} onSuccess={handleStellarSuccess} />
+                    <StellarOrderWatch
+                      orderId={orderId}
+                      expectedAmountRaw={expectedAmountRaw}
+                      expectedTokenContractId={expectedTokenContractId}
+                      enabled
+                      onEvent={handleObservedPayment}
+                    />
+                    <p className="text-[11px] text-gray-500 text-center">
+                      The order stays open until this exact order ID, USDC token, and raw cart total are confirmed on-chain. Email verification alone never clears your cart.
+                    </p>
+                    <button type="button" onClick={handleGoBack} className="w-full flex justify-center items-center bg-gray-300 text-black py-2 rounded hover:bg-gray-400 transition-colors">
+                      <MdArrowBack className="mr-2" /> Back to verification
+                    </button>
+                  </>
+                )}
               </div>
             )}
 
