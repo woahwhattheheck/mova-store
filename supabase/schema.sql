@@ -112,7 +112,7 @@ drop policy if exists "Users can read own orders" on public.orders;
 create policy "Users can read own orders"
   on public.orders for select
   to authenticated
-  using (auth.uid() = user_id);
+  using ((select auth.uid()) = user_id);
 
 -- Signed-in buyers can create only their own order rows. Guest checkout remains
 -- device-local and receives no anonymous database insert policy.
@@ -121,10 +121,10 @@ create policy "Users can insert orders"
   on public.orders for insert
   to authenticated
   with check (
-    auth.uid() = user_id
+    (select auth.uid()) = user_id
     and (
       user_email is null
-      or lower(auth.email()) = lower(user_email)
+      or lower((select auth.jwt() ->> 'email')) = lower(user_email)
     )
   );
 
