@@ -5,7 +5,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import StellarOrderWatch from "../../components/StellarOrderWatch";
 import { bytesToHex, hashOrderId } from "../../lib/stellar/scval";
 
-// Create mock callbacks storage
 let lastIndexerCallbacks = null;
 const mockStart = vi.fn((callbacks) => {
   lastIndexerCallbacks = callbacks;
@@ -23,45 +22,56 @@ vi.mock("../../lib/stellar/indexer", () => {
   };
 });
 
+const paymentExpectation = {
+  expectedAmountRaw: "500000000",
+  expectedTokenContractId: "CA7TOKENADDRESS",
+};
+
 describe("StellarOrderWatch Component", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     lastIndexerCallbacks = null;
   });
 
-  it("renders starting state on mount when orderId is provided", async () => {
-    render(<StellarOrderWatch orderId="ord-123" />);
+  it("renders starting state on mount when exact payment expectations are provided", async () => {
+    render(<StellarOrderWatch orderId="ord-123" {...paymentExpectation} />);
 
     expect(screen.getByText("Stellar order monitor")).toBeInTheDocument();
     expect(screen.getByText("Starting…")).toBeInTheDocument();
   });
 
   it("does not start indexer when disabled or orderId is empty", () => {
-    const { rerender } = render(<StellarOrderWatch orderId="" />);
+    const { rerender } = render(<StellarOrderWatch orderId="" {...paymentExpectation} />);
     expect(mockStart).not.toHaveBeenCalled();
 
-    rerender(<StellarOrderWatch orderId="ord-123" enabled={false} />);
+    rerender(<StellarOrderWatch orderId="ord-123" enabled={false} {...paymentExpectation} />);
+    expect(mockStart).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when exact token or amount expectations are unavailable", async () => {
+    render(<StellarOrderWatch orderId="ord-123" />);
+
+    expect(
+      screen.getByText(/missing an exact token or amount expectation|cannot verify the expected amount/i)
+    ).toBeInTheDocument();
     expect(mockStart).not.toHaveBeenCalled();
   });
 
   it("updates UI on indexer status change and error callback", async () => {
-    render(<StellarOrderWatch orderId="order-abc-456" />);
+    render(<StellarOrderWatch orderId="order-abc-456" {...paymentExpectation} />);
 
-    // Wait for hashOrderId resolution and indexer.start call
     await vi.waitFor(() => {
       expect(mockStart).toHaveBeenCalled();
     });
 
-    // Simulate status callback from indexer (connected/running)
     act(() => {
       lastIndexerCallbacks.onStatus({ running: true });
     });
 
     expect(
-      screen.getByText(/Listening for on-chain events for order order-abc-456…/i)
+      screen.getByText(/Listening for the exact USDC payment for order order-abc-456…/i)
     ).toBeInTheDocument();
 
-    // Simulate error callback
     act(() => {
       lastIndexerCallbacks.onError(new Error("RPC network failure"));
     });
@@ -71,13 +81,12 @@ describe("StellarOrderWatch Component", () => {
 
   it("ignores non-pay events and events for other order IDs", async () => {
     const onEvent = vi.fn();
-    render(<StellarOrderWatch orderId="my-order-99" onEvent={onEvent} />);
+    render(<StellarOrderWatch orderId="my-order-99" onEvent={onEvent} {...paymentExpectation} />);
 
     await vi.waitFor(() => {
       expect(mockStart).toHaveBeenCalled();
     });
 
-    // Event with wrong symbol
     act(() => {
       lastIndexerCallbacks.onEvent({
         symbol: "create_order",
@@ -89,11 +98,14 @@ describe("StellarOrderWatch Component", () => {
     expect(mockStop).not.toHaveBeenCalled();
     expect(screen.queryByText(/Payment detected on-chain/i)).not.toBeInTheDocument();
 
-    // Event with symbol 'pay' but mismatched topic4
     act(() => {
       lastIndexerCallbacks.onEvent({
         symbol: "pay",
-        fields: { topic4: "deadbeef00000000000000000000000000000000000000000000000000000000" },
+        fields: {
+          topic1: paymentExpectation.expectedTokenContractId,
+          topic4: "deadbeef00000000000000000000000000000000000000000000000000000000",
+          amount: paymentExpectation.expectedAmountRaw,
+        },
       });
     });
 
@@ -102,10 +114,10 @@ describe("StellarOrderWatch Component", () => {
     expect(screen.queryByText(/Payment detected on-chain/i)).not.toBeInTheDocument();
   });
 
-  it("matches correct order event, calls onEvent, stops indexer, and renders matched details", async () => {
+  it("keeps listening through wrong-token and underpayment events, then accepts the exact receipt", async () => {
     const orderId = "order-match-777";
     const onEvent = vi.fn();
-    render(<StellarOrderWatch orderId={orderId} onEvent={onEvent} />);
+    render(<StellarOrderWatch orderId={orderId} onEvent={onEvent} {...paymentExpectation} />);
 
     await vi.waitFor(() => {
       expect(mockStart).toHaveBeenCalled();
@@ -113,6 +125,36 @@ describe("StellarOrderWatch Component", () => {
 
     const expectedHashBytes = await hashOrderId(orderId);
     const expectedHex = bytesToHex(expectedHashBytes).toLowerCase();
+
+    act(() => {
+      lastIndexerCallbacks.onEvent({
+        symbol: "pay",
+        fields: {
+          topic1: "CWRONGTOKEN",
+          topic4: expectedHex,
+          amount: paymentExpectation.expectedAmountRaw,
+        },
+      });
+    });
+
+    expect(onEvent).not.toHaveBeenCalled();
+    expect(mockStop).not.toHaveBeenCalled();
+    expect(screen.getByText(/token did not match USDC/i)).toBeInTheDocument();
+
+    act(() => {
+      lastIndexerCallbacks.onEvent({
+        symbol: "pay",
+        fields: {
+          topic1: paymentExpectation.expectedTokenContractId,
+          topic4: expectedHex,
+          amount: "499999999",
+        },
+      });
+    });
+
+    expect(onEvent).not.toHaveBeenCalled();
+    expect(mockStop).not.toHaveBeenCalled();
+    expect(screen.getByText(/amount did not match the cart total/i)).toBeInTheDocument();
 
     const matchingEvent = {
       id: "ev-1",
@@ -122,9 +164,9 @@ describe("StellarOrderWatch Component", () => {
       symbol: "pay",
       topics: [],
       fields: {
-        topic1: "CA7TOKENADDRESS",
+        topic1: paymentExpectation.expectedTokenContractId,
         topic4: expectedHex,
-        amount: "50.00 USDC",
+        amount: paymentExpectation.expectedAmountRaw,
       },
     };
 
@@ -135,11 +177,10 @@ describe("StellarOrderWatch Component", () => {
     expect(onEvent).toHaveBeenCalledTimes(1);
     expect(onEvent).toHaveBeenCalledWith(matchingEvent);
     expect(mockStop).toHaveBeenCalledTimes(1);
-
     expect(screen.getByText("Payment detected on-chain ✓")).toBeInTheDocument();
     expect(screen.getByText("1234567")).toBeInTheDocument();
-    expect(screen.getByText("50.00 USDC")).toBeInTheDocument();
-    expect(screen.getByText("CA7TOKENADDRESS")).toBeInTheDocument();
+    expect(screen.getByText(paymentExpectation.expectedAmountRaw)).toBeInTheDocument();
+    expect(screen.getByText(paymentExpectation.expectedTokenContractId)).toBeInTheDocument();
     expect(screen.getByText("0xabc123txhash456789")).toBeInTheDocument();
   });
 });

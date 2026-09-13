@@ -11,6 +11,8 @@ pub const LEDGER_TO_EXTEND_TO: u32 = 10_000;
 pub enum DataKey {
     /// The merchant wallet that owns the contract and can dispatch/refund.
     Admin,
+    /// Dedicated Ed25519 public key allowed to sign short-lived checkout quotes.
+    QuoteSigner,
     /// An order registry entry, keyed by 32-byte order id.
     Order(BytesN<32>),
     /// Whether the given SEP-41 token contract is accepted by the merchant.
@@ -35,6 +37,22 @@ pub fn get_admin(env: &Env) -> Result<Address, Error> {
 pub fn set_admin(env: &Env, admin: &Address) {
     env.storage().persistent().set(&DataKey::Admin, admin);
     extend_ttl(env, &DataKey::Admin);
+}
+
+pub fn get_quote_signer(env: &Env) -> Result<BytesN<32>, Error> {
+    let signer: Option<BytesN<32>> = env.storage().persistent().get(&DataKey::QuoteSigner);
+    match signer {
+        Some(signer) => {
+            extend_ttl(env, &DataKey::QuoteSigner);
+            Ok(signer)
+        }
+        None => Err(Error::QuoteSignerNotConfigured),
+    }
+}
+
+pub fn set_quote_signer(env: &Env, signer: &BytesN<32>) {
+    env.storage().persistent().set(&DataKey::QuoteSigner, signer);
+    extend_ttl(env, &DataKey::QuoteSigner);
 }
 
 pub fn get_order(env: &Env, order_id: &BytesN<32>) -> Option<Order> {

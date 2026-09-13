@@ -18,4 +18,10 @@ pub enum Error {
     OrderNotFound = 6,
     /// The order is not in a state that allows this transition.
     InvalidOrderStatus = 7,
+    /// Unquoted payment entry points are disabled; use pay_with_quote.
+    QuoteRequired = 8,
+    /// The merchant has not configured the dedicated checkout quote signer.
+    QuoteSignerNotConfigured = 9,
+    /// The signed merchant quote is no longer valid.
+    QuoteExpired = 10,
 }
