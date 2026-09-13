@@ -1,29 +1,27 @@
 import {
   Address,
   Keypair,
+  authorizeEntry,
   rpc,
   scValToNative,
   xdr,
 } from "@stellar/stellar-sdk";
+import { assembleTransaction } from "@stellar/stellar-sdk/rpc";
 
 import type { CanonicalQuoteLine } from "../checkout-quote";
 import {
   CHECKOUT_CONTRACT_ID,
+  NETWORK_PASSPHRASE,
   RPC_URL,
   defaultToken,
 } from "./config";
-import { waitForTransaction } from "./events";
 import {
   addressToScVal,
   bytes32ToScVal,
   bytesToHex,
   symbolToScVal,
 } from "./scval";
-import {
-  buildInvocationTransaction,
-  prepareAndReport,
-  simulateContractRead,
-} from "./simulate";
+import { buildInvocationTransaction, simulateContractRead } from "./simulate";
 
 export class MerchantQuoteError extends Error {
   constructor(
@@ -42,11 +40,11 @@ export interface MerchantQuoteRegistration {
   amountRaw: bigint;
 }
 
-export interface RegisteredMerchantQuote {
+export interface PreparedMerchantQuote {
   amountRaw: bigint;
   orderIdHex: string;
-  expiresAt: number;
-  transactionHash: string;
+  transactionXdr: string;
+  authValidUntilLedger: number;
 }
 
 async function sha256Text(value: string): Promise<Uint8Array> {
@@ -136,14 +134,38 @@ function quoteSignerKeypair(): Keypair {
   }
 }
 
+function authorizationAddress(entry: xdr.SorobanAuthorizationEntry): string | null {
+  const credentials = entry.credentials();
+  const kind = credentials.switch();
+
+  if (kind === xdr.SorobanCredentialsType.sorobanCredentialsSourceAccount()) {
+    return null;
+  }
+  if (kind === xdr.SorobanCredentialsType.sorobanCredentialsAddress()) {
+    return Address.fromScAddress(credentials.address().address()).toString();
+  }
+  if (kind === xdr.SorobanCredentialsType.sorobanCredentialsAddressV2()) {
+    return Address.fromScAddress(credentials.addressV2().address()).toString();
+  }
+  throw new MerchantQuoteError(
+    "UNSUPPORTED_QUOTE_AUTH",
+    "Checkout simulation returned an unsupported authorization credential."
+  );
+}
+
 /**
- * Register a quote using a server-only signer. The browser never supplies a
- * price. Before signing, this function proves that every canonical Supabase
- * unit price exactly matches the merchant-controlled on-chain catalog.
+ * Prepare a merchant-authorized quote transaction without spending server XLM.
+ *
+ * The buyer is the transaction source (and therefore the eventual fee payer).
+ * Recording-mode simulation produces the non-invoker authorization entry for
+ * the dedicated quote signer; the server signs only that bounded entry, then
+ * returns a partially authorized transaction for the buyer wallet to sign and
+ * submit. This prevents an anonymous quote endpoint from becoming a fee-drain
+ * primitive against the merchant signer.
  */
-export async function registerMerchantQuote(
+export async function prepareMerchantQuote(
   registration: MerchantQuoteRegistration
-): Promise<RegisteredMerchantQuote> {
+): Promise<PreparedMerchantQuote> {
   if (!CHECKOUT_CONTRACT_ID) {
     throw new MerchantQuoteError(
       "CONTRACT_NOT_CONFIGURED",
@@ -151,13 +173,19 @@ export async function registerMerchantQuote(
     );
   }
 
-  // Validate address before any RPC or signing work.
+  // Validate the buyer before any RPC or signing work.
   addressToScVal(registration.buyer);
 
   const token = defaultToken();
   const signer = quoteSignerKeypair();
-  const server = new rpc.Server(RPC_URL);
+  if (registration.buyer === signer.publicKey()) {
+    throw new MerchantQuoteError(
+      "BUYER_SIGNER_COLLISION",
+      "Quote signer cannot also be the buyer transaction source."
+    );
+  }
 
+  const server = new rpc.Server(RPC_URL);
   const onChainSigner = await configuredQuoteSigner(server);
   if (onChainSigner !== signer.publicKey()) {
     throw new MerchantQuoteError(
@@ -176,17 +204,26 @@ export async function registerMerchantQuote(
     await quoteLinesToScVal(registration.lines),
   ];
 
-  const account = await server.getAccount(signer.publicKey());
-  const tx = buildInvocationTransaction(account, CHECKOUT_CONTRACT_ID, "create_quote", args);
-  const { tx: prepared, report } = await prepareAndReport(server, tx);
-  if (!report.ok || !report.retval) {
+  // The buyer source account pays the transaction fee when it later submits
+  // this XDR. The server secret signs only the Soroban authorization entry.
+  const buyerAccount = await server.getAccount(registration.buyer);
+  const tx = buildInvocationTransaction(
+    buyerAccount,
+    CHECKOUT_CONTRACT_ID,
+    "create_quote",
+    args
+  );
+  const simulation = await server.simulateTransaction(tx, undefined, undefined, true);
+  if (rpc.Api.isSimulationError(simulation) || !simulation.result?.retval) {
     throw new MerchantQuoteError(
       "QUOTE_SIMULATION_FAILED",
-      report.error?.message ?? "Quote registration simulation failed."
+      rpc.Api.isSimulationError(simulation)
+        ? String(simulation.error)
+        : "Quote registration simulation returned no result."
     );
   }
 
-  const contractAmountRaw = BigInt(scValToNative(report.retval).toString());
+  const contractAmountRaw = BigInt(scValToNative(simulation.result.retval).toString());
   if (contractAmountRaw !== registration.amountRaw) {
     throw new MerchantQuoteError(
       "QUOTE_AMOUNT_MISMATCH",
@@ -194,35 +231,46 @@ export async function registerMerchantQuote(
     );
   }
 
-  prepared.sign(signer);
-  const sent = await server.sendTransaction(prepared);
-  if (sent.status === "ERROR") {
+  const entries = simulation.result.auth ?? [];
+  const nonSourceEntries = entries.filter((entry) => authorizationAddress(entry) !== null);
+  if (nonSourceEntries.length !== 1 || authorizationAddress(nonSourceEntries[0]) !== signer.publicKey()) {
     throw new MerchantQuoteError(
-      "QUOTE_SUBMISSION_FAILED",
-      "Quote registration transaction was rejected."
+      "QUOTE_AUTH_MISMATCH",
+      "Quote simulation did not request exactly the configured quote signer authorization."
     );
   }
 
-  await waitForTransaction(sent.hash);
-
-  const expiry = await simulateContractRead(
-    server,
-    CHECKOUT_CONTRACT_ID,
-    "quote_expires_at",
-    [bytes32ToScVal(orderBytes)],
-    signer.publicKey()
+  const authValidUntilLedger = simulation.latestLedger + 12;
+  simulation.result.auth = await Promise.all(
+    entries.map(async (entry) => {
+      const address = authorizationAddress(entry);
+      if (address === null) return entry;
+      if (address !== signer.publicKey()) {
+        throw new MerchantQuoteError(
+          "QUOTE_AUTH_MISMATCH",
+          "Quote simulation requested an unexpected authorization signer."
+        );
+      }
+      return authorizeEntry(entry, signer, authValidUntilLedger, NETWORK_PASSPHRASE);
+    })
   );
-  if (!expiry || expiry.switch() === xdr.ScValType.scvVoid()) {
+
+  const prepared = assembleTransaction(tx, simulation).build();
+
+  // Signed auth entries switch simulation into enforcement mode. Validate the
+  // bounded server authorization before returning any XDR to the browser.
+  const enforcement = await server.simulateTransaction(prepared);
+  if (rpc.Api.isSimulationError(enforcement)) {
     throw new MerchantQuoteError(
-      "QUOTE_PERSISTENCE_FAILED",
-      "Quote registration succeeded but its expiry could not be read back."
+      "QUOTE_AUTH_INVALID",
+      "Prepared quote authorization failed enforcement simulation."
     );
   }
 
   return {
     amountRaw: contractAmountRaw,
     orderIdHex: bytesToHex(orderBytes),
-    expiresAt: Number(scValToNative(expiry)),
-    transactionHash: sent.hash,
+    transactionXdr: prepared.toXDR(),
+    authValidUntilLedger,
   };
 }
