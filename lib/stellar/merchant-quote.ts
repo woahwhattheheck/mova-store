@@ -1,6 +1,7 @@
 import {
   Address,
   Keypair,
+  StrKey,
   authorizeEntry,
   rpc,
   scValToNative,
@@ -173,7 +174,15 @@ export async function prepareMerchantQuote(
     );
   }
 
-  // Validate the buyer before any RPC or signing work.
+  // The buyer is the transaction source/fee payer, so only a real Stellar
+  // account (G...) is valid here. Contract addresses can satisfy generic
+  // Address parsing but cannot serve as the transaction source account.
+  if (!StrKey.isValidEd25519PublicKey(registration.buyer)) {
+    throw new MerchantQuoteError(
+      "INVALID_BUYER_ACCOUNT",
+      "Buyer must be a Stellar account public key."
+    );
+  }
   addressToScVal(registration.buyer);
 
   const token = defaultToken();
