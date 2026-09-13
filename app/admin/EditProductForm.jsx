@@ -5,6 +5,7 @@ import {
   updateProduct,
   uploadProductImage,
 } from "../../lib/products";
+import { validateProductName, validatePrice } from "../../lib/validation";
 
 const EditProductForm = ({ productId, onProductUpdated }) => {
   const [productName, setProductName] = useState("");
@@ -42,8 +43,22 @@ const EditProductForm = ({ productId, onProductUpdated }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setSuccessMessage("");
+    setErrorMessage("");
 
     try {
+      const nameValidation = validateProductName(productName);
+      if (!nameValidation.isValid) {
+        setErrorMessage(nameValidation.error);
+        return;
+      }
+
+      const priceValidation = validatePrice(productPrice);
+      if (!priceValidation.isValid) {
+        setErrorMessage(priceValidation.error);
+        return;
+      }
+
       let imageUrl = existingImageUrl;
 
       if (productImage) {
@@ -51,8 +66,8 @@ const EditProductForm = ({ productId, onProductUpdated }) => {
       }
 
       await updateProduct(productId, {
-        name: productName,
-        price: parseFloat(productPrice),
+        name: nameValidation.sanitized,
+        price: Number(priceValidation.sanitized),
         img: imageUrl,
       });
 
@@ -102,6 +117,9 @@ const EditProductForm = ({ productId, onProductUpdated }) => {
             className="w-full p-3 mt-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
             value={productPrice}
             onChange={(e) => setProductPrice(e.target.value)}
+            min="0"
+            max="1000000"
+            step="0.01"
             required
           />
         </div>

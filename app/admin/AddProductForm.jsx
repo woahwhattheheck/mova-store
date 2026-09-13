@@ -3,6 +3,7 @@ import React, { useState } from "react";
 import Toast from "../../components/Toast";
 import useToast from "../../hooks/useToast";
 import { createProduct, uploadProductImage } from "../../lib/products";
+import { validateProductName, validatePrice } from "../../lib/validation";
 
 const AddProductForm = ({ onProductAdded }) => {
   const [productName, setProductName] = useState("");
@@ -16,16 +17,27 @@ const AddProductForm = ({ onProductAdded }) => {
     setLoading(true);
 
     try {
+      const nameValidation = validateProductName(productName);
+      if (!nameValidation.isValid) {
+        showToast(nameValidation.error);
+        return;
+      }
+
+      const priceValidation = validatePrice(productPrice);
+      if (!priceValidation.isValid) {
+        showToast(priceValidation.error);
+        return;
+      }
+
       if (!productImage) {
         showToast("Please select an image file");
-        setLoading(false);
         return;
       }
 
       const imageUrl = await uploadProductImage(productImage);
       await createProduct({
-        name: productName,
-        price: parseFloat(productPrice),
+        name: nameValidation.sanitized,
+        price: Number(priceValidation.sanitized),
         img: imageUrl,
       });
 
@@ -62,6 +74,9 @@ const AddProductForm = ({ onProductAdded }) => {
             className="w-full p-3 mt-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
             value={productPrice}
             onChange={(e) => setProductPrice(e.target.value)}
+            min="0"
+            max="1000000"
+            step="0.01"
             required
           />
         </div>
