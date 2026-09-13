@@ -16,7 +16,9 @@ export default function BuyerOrdersPage() {
   const loadOrders = useCallback(async () => {
     setLoading(true);
     try {
-      const userIdentifier = user?.email || user?.uid;
+      // Prefer the immutable Supabase user id. Email is only a compatibility
+      // fallback for older app-user shapes and is not the database auth boundary.
+      const userIdentifier = user?.uid || user?.email;
       const data = await fetchBuyerOrders(userIdentifier);
       setOrders(data);
     } catch (err) {
