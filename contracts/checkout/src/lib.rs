@@ -13,22 +13,79 @@ use crate::errors::Error;
 use crate::events::{OrderCreated, OrderRefunded, OrderShipped, PaymentReceived};
 use crate::order::{Order, Status};
 use crate::storage::{
-    get_admin, get_order, has_admin, is_token_allowed, set_admin, set_order, set_token_allowed,
+    get_admin, get_order, get_quote_signer, has_admin, is_token_allowed, set_admin, set_order,
+    set_quote_signer, set_token_allowed,
 };
+
+/// Compatibility lifetime for merchant-created orders which do not provide an
+/// explicit expiry. The storefront uses `create_quote` with an explicit server
+/// expiry; `create_order` remains an admin API for other integrations.
+pub const DEFAULT_QUOTE_TTL_SECONDS: u64 = 600;
 
 #[contract]
 pub struct Checkout;
+
+fn store_pending_quote(
+    env: &Env,
+    buyer: Address,
+    order_id: BytesN<32>,
+    token: Address,
+    amount: i128,
+    expires_at: u64,
+) -> Result<(), Error> {
+    if amount <= 0 {
+        return Err(Error::InvalidAmount);
+    }
+    if !is_token_allowed(env, &token) {
+        return Err(Error::TokenNotAllowed);
+    }
+    if get_order(env, &order_id).is_some() {
+        return Err(Error::OrderAlreadyExists);
+    }
+
+    let timestamp = env.ledger().timestamp();
+    if expires_at <= timestamp {
+        return Err(Error::QuoteExpired);
+    }
+
+    let order = Order {
+        buyer: buyer.clone(),
+        amount,
+        token: token.clone(),
+        timestamp,
+        expires_at,
+        status: Status::Pending,
+    };
+    set_order(env, &order_id, &order);
+
+    OrderCreated {
+        token,
+        buyer,
+        order_id,
+        amount,
+        timestamp,
+        expires_at,
+    }
+    .publish(env);
+
+    Ok(())
+}
 
 #[contractimpl]
 impl Checkout {
     /// Initialize the contract with the merchant's Stellar public key.
     /// The merchant address must authorize this call (deployer signs).
+    ///
+    /// The merchant is also the initial quote signer. Production deployments
+    /// should rotate quote signing to a dedicated server account via
+    /// `set_quote_signer`, keeping the escrow/admin wallet out of the web tier.
     pub fn initialize(env: Env, merchant: Address) -> Result<(), Error> {
         if has_admin(&env) {
             return Err(Error::AlreadyInitialized);
         }
         merchant.require_auth();
         set_admin(&env, &merchant);
+        set_quote_signer(&env, &merchant);
         Ok(())
     }
 
@@ -44,6 +101,20 @@ impl Checkout {
     /// Read the merchant wallet that owns the contract.
     pub fn merchant(env: Env) -> Result<Address, Error> {
         get_admin(&env)
+    }
+
+    /// Rotate the account allowed to register merchant-authoritative quotes.
+    /// Only the merchant/admin can authorize rotation.
+    pub fn set_quote_signer(env: Env, new_signer: Address) -> Result<(), Error> {
+        let admin = get_admin(&env)?;
+        admin.require_auth();
+        set_quote_signer(&env, &new_signer);
+        Ok(())
+    }
+
+    /// Read the account currently authorized to register pending quotes.
+    pub fn quote_signer(env: Env) -> Result<Address, Error> {
+        get_quote_signer(&env)
     }
 
     /// Approve a SEP-41 token contract for payments. Only the merchant can
@@ -69,14 +140,8 @@ impl Checkout {
         is_token_allowed(&env, &token)
     }
 
-    /// Register a buyer's intent to fund an order. The buyer authorizes this.
-    ///
-    /// * `buyer`    - the address that will pay.
-    /// * `order_id` - a unique 32-byte identifier for the order.
-    /// * `token`    - the SEP-41 token contract the buyer will pay with.
-    /// * `amount`   - the intended amount, in raw token units.
-    ///
-    /// Emits `create_order`. No funds move until `pay` is called.
+    /// Register a pending order with the default quote lifetime. This is a
+    /// merchant-authorized compatibility API; buyers cannot self-price it.
     pub fn create_order(
         env: Env,
         buyer: Address,
@@ -84,54 +149,36 @@ impl Checkout {
         token: Address,
         amount: i128,
     ) -> Result<(), Error> {
-        buyer.require_auth();
-
-        if amount <= 0 {
-            return Err(Error::InvalidAmount);
-        }
-        if !is_token_allowed(&env, &token) {
-            return Err(Error::TokenNotAllowed);
-        }
-        if get_order(&env, &order_id).is_some() {
-            return Err(Error::OrderAlreadyPaid);
-        }
-
-        let timestamp = env.ledger().timestamp();
-        let order = Order {
-            buyer: buyer.clone(),
-            amount,
-            token: token.clone(),
-            timestamp,
-            status: Status::Pending,
-        };
-        set_order(&env, &order_id, &order);
-
-        OrderCreated {
-            token,
-            buyer,
-            order_id,
-            amount,
-            timestamp,
-        }
-        .publish(&env);
-
-        Ok(())
+        let signer = get_quote_signer(&env)?;
+        signer.require_auth();
+        let expires_at = env
+            .ledger()
+            .timestamp()
+            .saturating_add(DEFAULT_QUOTE_TTL_SECONDS);
+        store_pending_quote(&env, buyer, order_id, token, amount, expires_at)
     }
 
-    /// Pay for an order. The buyer authorizes the transfer.
+    /// Register a server/catalog-derived quote with an explicit expiry.
     ///
-    /// * `token`    - the [SEP-41 token](https://stellar.org/developers/learn/guides/interoperability/sep-41)
-    ///                contract to pay with (whitelisted by the merchant).
-    /// * `buyer`    - the address paying for the order (must authorize the transfer).
-    /// * `order_id` - a unique 32-byte identifier for the order.
-    /// * `amount`   - the exact amount of `token` to escrow, in raw token units.
-    ///
-    /// Transfers `amount` from `buyer` into the **contract's escrow** and
-    /// records the order as `Paid`. Funds are released to the merchant by
-    /// calling `dispatch`, or returned to the buyer by calling `refund`.
-    ///
-    /// Emits `pay` (aliased `payment_received`). An order can only be paid
-    /// once; duplicate payments are rejected with `OrderAlreadyPaid`.
+    /// The configured quote signer must authorize this call. The signer is set
+    /// by the merchant, so browser-controlled price/total fields cannot create
+    /// payable state without trusted merchant authorization.
+    pub fn create_quote(
+        env: Env,
+        buyer: Address,
+        order_id: BytesN<32>,
+        token: Address,
+        amount: i128,
+        expires_at: u64,
+    ) -> Result<(), Error> {
+        let signer = get_quote_signer(&env)?;
+        signer.require_auth();
+        store_pending_quote(&env, buyer, order_id, token, amount, expires_at)
+    }
+
+    /// Pay an existing merchant-authorized pending quote. The buyer authorizes
+    /// the token transfer; buyer, token, amount, order id and expiry are bound
+    /// by the pending quote and cannot be replaced by payment input.
     pub fn pay(
         env: Env,
         token: Address,
@@ -144,38 +191,41 @@ impl Checkout {
         if amount <= 0 {
             return Err(Error::InvalidAmount);
         }
+
+        let existing = get_order(&env, &order_id).ok_or(Error::OrderNotFound)?;
+        if existing.status != Status::Pending {
+            return Err(Error::OrderAlreadyPaid);
+        }
+        if env.ledger().timestamp() >= existing.expires_at {
+            return Err(Error::QuoteExpired);
+        }
+        if existing.buyer != buyer || existing.token != token || existing.amount != amount {
+            return Err(Error::QuoteMismatch);
+        }
         if !is_token_allowed(&env, &token) {
             return Err(Error::TokenNotAllowed);
         }
 
         let merchant = get_admin(&env)?;
-
-        // A previous pay/refund cannot be superseded; a pending order can.
-        if let Some(existing) = get_order(&env, &order_id) {
-            if existing.status != Status::Pending {
-                return Err(Error::OrderAlreadyPaid);
-            }
-        }
-
         let token_client = TokenClient::new(&env, &token);
 
-        // Escrow: buyer -> contract. The contract's own authorization on the
-        // transfer is derived from this invocation (it holds the funds).
+        // Escrow: buyer -> contract. No order state is mutated before the
+        // exact quote checks and token transfer succeed.
         token_client.transfer(
             &buyer,
             &MuxedAddress::from(&env.current_contract_address()),
             &amount,
         );
 
-        // Record the order as Paid, reflecting the actual payment.
-        let order = Order {
-            buyer: buyer.clone(),
-            amount,
-            token: token.clone(),
-            timestamp: env.ledger().timestamp(),
-            status: Status::Paid,
-        };
-        set_order(&env, &order_id, &order);
+        set_order(
+            &env,
+            &order_id,
+            &Order {
+                status: Status::Paid,
+                timestamp: env.ledger().timestamp(),
+                ..existing.clone()
+            },
+        );
 
         PaymentReceived {
             token: token.clone(),
@@ -191,8 +241,6 @@ impl Checkout {
 
     /// Release a paid order's escrow to the merchant. Only the merchant can
     /// call this. Once dispatched the order cannot be refunded.
-    ///
-    /// Emits `dispatch`.
     pub fn dispatch(env: Env, order_id: BytesN<32>) -> Result<(), Error> {
         let merchant = get_admin(&env)?;
         merchant.require_auth();
@@ -203,8 +251,6 @@ impl Checkout {
         }
 
         let token_client = TokenClient::new(&env, &order.token);
-
-        // Release: contract -> merchant.
         token_client.transfer(
             &env.current_contract_address(),
             &MuxedAddress::from(&merchant),
@@ -233,8 +279,6 @@ impl Checkout {
 
     /// Refund a paid order's escrow back to the buyer. Only the merchant can
     /// call this (e.g. the goods could not be dispatched).
-    ///
-    /// Emits `refund`.
     pub fn refund(env: Env, order_id: BytesN<32>) -> Result<(), Error> {
         let merchant = get_admin(&env)?;
         merchant.require_auth();
@@ -245,8 +289,6 @@ impl Checkout {
         }
 
         let token_client = TokenClient::new(&env, &order.token);
-
-        // Refund: contract -> buyer.
         token_client.transfer(
             &env.current_contract_address(),
             &MuxedAddress::from(&order.buyer),
