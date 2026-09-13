@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AiOutlineLoading3Quarters } from "react-icons/ai";
 import { MdArrowBack } from "react-icons/md";
@@ -12,8 +12,7 @@ import StellarWalletButton from "../../components/StellarWalletButton";
 import Toast from "../../components/Toast";
 import useToast from "../../hooks/useToast";
 import sendMail from "../../lib/sendmail";
-import { usdToRawUnits } from "../../lib/stellar/checkout";
-import { defaultToken } from "../../lib/stellar/config";
+import type { SignedCheckoutQuote } from "../../lib/stellar/checkout";
 import { validateAddress, validateEmail, validateName, validateOTP } from "../../lib/validation";
 
 const Checkout = () => {
@@ -28,6 +27,7 @@ const Checkout = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [enteredOtp, setEnteredOtp] = useState("");
   const [paymentComplete, setPaymentComplete] = useState(false);
+  const [paymentQuote, setPaymentQuote] = useState<SignedCheckoutQuote | null>(null);
   const { toast, showToast, hideToast } = useToast(5000);
   const [formData, setFormData] = useState({
     firstName: "",
@@ -38,8 +38,10 @@ const Checkout = () => {
   });
 
   const [orderId] = useState(() => `SS-${Date.now()}-${Math.floor(Math.random() * 1e6)}`);
-  const expectedAmountRaw = totalPrice > 0 ? usdToRawUnits(totalPrice).toString() : "";
-  const expectedTokenContractId = defaultToken().contractId;
+  const productIds = useMemo(
+    () => cartItems.map((item) => item?.id).filter((id): id is string => typeof id === "string" && id.length > 0),
+    [cartItems]
+  );
 
   const clearPaidCart = () => {
     localStorage.removeItem("cartItems");
@@ -119,7 +121,7 @@ const Checkout = () => {
     if (isValid && entered === otp) {
       setIsOtpSending(false);
       setStage(3);
-      showToast("Email verified. Complete payment with Stellar USDC.");
+      showToast("Email verified. Merchant pricing will be verified before payment.");
       return;
     }
 
@@ -129,6 +131,7 @@ const Checkout = () => {
 
   const handleGoBack = () => {
     if (stage > 1 && !paymentComplete) {
+      setPaymentQuote(null);
       setStage((current) => current - 1);
       setIsSubmitting(false);
       setIsOtpSending(false);
@@ -149,20 +152,19 @@ const Checkout = () => {
     }
   }, []);
 
-  const isEmptyCart = isLoaded && !paymentComplete && (cartItems.length === 0 || totalPrice <= 0);
+  // Cart contents determine whether checkout can proceed. The local total is
+  // display-only; the signed server quote is the sole payment authority.
+  const isEmptyCart = isLoaded && !paymentComplete && cartItems.length === 0;
+  const quotedUsd = paymentQuote ? paymentQuote.amountCents / 100 : null;
 
   if (isEmptyCart) {
     return (
       <div className="container mx-auto px-4 py-16 my-10 max-w-lg text-center bg-white rounded-lg shadow-md border-2 border-purple-300">
         <h2 className="text-2xl font-bold text-gray-800 mb-3">Your cart is empty</h2>
         <p className="text-gray-600 mb-6">
-          Looks like you have not added any items to your cart yet. Please add items to proceed with
-          checkout.
+          Looks like you have not added any items to your cart yet. Please add items to proceed with checkout.
         </p>
-        <Link
-          href="/shop"
-          className="inline-flex items-center justify-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-purple-700 hover:bg-purple-800 transition-colors"
-        >
+        <Link href="/shop" className="inline-flex items-center justify-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-purple-700 hover:bg-purple-800 transition-colors">
           <MdArrowBack className="mr-2" /> Back to Shop
         </Link>
       </div>
@@ -174,15 +176,8 @@ const Checkout = () => {
       <div className="flex justify-center items-center space-x-2 my-4 sm:mx-0 mx-4 mt-16" aria-label="Checkout progress">
         {[1, 2, 3].map((step, index) => (
           <div className="contents" key={step}>
-            {index > 0 && (
-              <span className={`w-20 h-1 sm:w-96 ${stage >= step ? "bg-purple-700" : "bg-gray-200"}`} />
-            )}
-            <span
-              className={`flex justify-center items-center w-8 h-8 sm:w-10 sm:h-10 border border-purple-700 rounded-full ${
-                stage >= step ? "bg-purple-700 text-white" : "bg-white"
-              }`}
-              aria-label={`Step ${step}`}
-            >
+            {index > 0 && <span className={`w-20 h-1 sm:w-96 ${stage >= step ? "bg-purple-700" : "bg-gray-200"}`} />}
+            <span className={`flex justify-center items-center w-8 h-8 sm:w-10 sm:h-10 border border-purple-700 rounded-full ${stage >= step ? "bg-purple-700 text-white" : "bg-white"}`} aria-label={`Step ${step}`}>
               {step}
             </span>
           </div>
@@ -196,13 +191,11 @@ const Checkout = () => {
             <div>
               <h2 className="text-2xl font-bold text-purple-950">Verified checkout, real payment</h2>
               <p className="mt-3 text-purple-950 max-w-md">
-                Email verification confirms where we can reach you. It never counts as payment.
-                Your order completes only after the matching Stellar USDC payment is confirmed.
+                Email verification confirms where we can reach you. It never counts as payment. Your order completes only after a merchant-priced Stellar USDC payment is confirmed.
               </p>
             </div>
             <div className="bg-white/80 border border-purple-700/30 rounded-md p-4 max-w-md text-sm text-gray-700">
-              Mova Store does not collect card numbers or CVVs in this checkout. A card rail should
-              only be offered when a real payment processor can authorize and capture it.
+              Mova Store does not collect card numbers or CVVs in this checkout. Cart totals stored in this browser are estimates only; the contract accepts only a short-lived signed catalog quote.
             </div>
           </div>
 
@@ -210,59 +203,25 @@ const Checkout = () => {
             {stage === 1 && (
               <form onSubmit={handleSubmit} className="bg-white p-4 rounded shadow-md">
                 <h2 className="text-2xl mb-2 text-center">Contact details</h2>
-                <p className="text-sm text-gray-600 mb-4 text-center">
-                  Verify your email first. No payment is taken at this step.
-                </p>
+                <p className="text-sm text-gray-600 mb-4 text-center">Verify your email first. No payment is taken at this step.</p>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  <div className="mb-4">
-                    <label htmlFor="firstName" className="block text-gray-700">First Name</label>
-                    <input id="firstName" type="text" name="firstName" value={formData.firstName} onChange={handleChange} required autoComplete="given-name" className="w-full px-3 py-2 border rounded" />
-                  </div>
-                  <div className="mb-4">
-                    <label htmlFor="lastName" className="block text-gray-700">Last Name</label>
-                    <input id="lastName" type="text" name="lastName" value={formData.lastName} onChange={handleChange} required autoComplete="family-name" className="w-full px-3 py-2 border rounded" />
-                  </div>
-                  <div className="mb-4">
-                    <label htmlFor="email" className="block text-gray-700">Email</label>
-                    <input id="email" type="email" name="email" value={formData.email} onChange={handleChange} required autoComplete="email" className="w-full px-3 py-2 border rounded" />
-                  </div>
-                  <div className="mb-4">
-                    <label htmlFor="address" className="block text-gray-700">Address</label>
-                    <input id="address" type="text" name="address" value={formData.address} onChange={handleChange} required autoComplete="street-address" className="w-full px-3 py-2 border rounded" />
-                  </div>
+                  <div className="mb-4"><label htmlFor="firstName" className="block text-gray-700">First Name</label><input id="firstName" type="text" name="firstName" value={formData.firstName} onChange={handleChange} required autoComplete="given-name" className="w-full px-3 py-2 border rounded" /></div>
+                  <div className="mb-4"><label htmlFor="lastName" className="block text-gray-700">Last Name</label><input id="lastName" type="text" name="lastName" value={formData.lastName} onChange={handleChange} required autoComplete="family-name" className="w-full px-3 py-2 border rounded" /></div>
+                  <div className="mb-4"><label htmlFor="email" className="block text-gray-700">Email</label><input id="email" type="email" name="email" value={formData.email} onChange={handleChange} required autoComplete="email" className="w-full px-3 py-2 border rounded" /></div>
+                  <div className="mb-4"><label htmlFor="address" className="block text-gray-700">Address</label><input id="address" type="text" name="address" value={formData.address} onChange={handleChange} required autoComplete="street-address" className="w-full px-3 py-2 border rounded" /></div>
                 </div>
                 <button type="submit" disabled={isSubmitting} className="w-full flex justify-center items-center bg-purple-600 text-white py-2 rounded hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                  {isSubmitting ? (
-                    <><AiOutlineLoading3Quarters className="animate-spin mr-2" />Sending verification code...</>
-                  ) : (
-                    "Send verification code"
-                  )}
+                  {isSubmitting ? <><AiOutlineLoading3Quarters className="animate-spin mr-2" />Sending verification code...</> : "Send verification code"}
                 </button>
               </form>
             )}
 
             {stage === 2 && (
               <form onSubmit={handleEmailConfirmationSubmit} className="bg-white p-4 rounded shadow-md h-full space-y-8">
-                <div>
-                  <h2 className="text-2xl mb-2 text-center">Verify email</h2>
-                  <p className="text-sm text-gray-600 text-center">
-                    Enter the six-digit code sent to {formData.email}. This verifies contact details only.
-                  </p>
-                </div>
-                <div className="mb-4">
-                  <label htmlFor="otpConfirmation" className="block text-gray-700">Verification code</label>
-                  <input id="otpConfirmation" type="text" name="otpConfirmation" value={enteredOtp} onChange={(event) => setEnteredOtp(event.target.value)} required maxLength={6} inputMode="numeric" pattern="[0-9]{6}" placeholder="000000" className="w-full px-3 py-2 border rounded" />
-                </div>
-                <button type="submit" disabled={isOtpSending} className="w-full bg-purple-600 text-white flex justify-center items-center py-2 rounded hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                  {isOtpSending ? (
-                    <><AiOutlineLoading3Quarters className="animate-spin mr-2" />Verifying...</>
-                  ) : (
-                    "Verify email"
-                  )}
-                </button>
-                <button type="button" onClick={handleGoBack} className="w-full flex justify-center items-center bg-gray-300 text-black py-2 rounded hover:bg-gray-400 transition-colors">
-                  <MdArrowBack className="mr-2" /> Edit contact details
-                </button>
+                <div><h2 className="text-2xl mb-2 text-center">Verify email</h2><p className="text-sm text-gray-600 text-center">Enter the six-digit code sent to {formData.email}. This verifies contact details only.</p></div>
+                <div className="mb-4"><label htmlFor="otpConfirmation" className="block text-gray-700">Verification code</label><input id="otpConfirmation" type="text" name="otpConfirmation" value={enteredOtp} onChange={(event) => setEnteredOtp(event.target.value)} required maxLength={6} inputMode="numeric" pattern="[0-9]{6}" placeholder="000000" className="w-full px-3 py-2 border rounded" /></div>
+                <button type="submit" disabled={isOtpSending} className="w-full bg-purple-600 text-white flex justify-center items-center py-2 rounded hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">{isOtpSending ? <><AiOutlineLoading3Quarters className="animate-spin mr-2" />Verifying...</> : "Verify email"}</button>
+                <button type="button" onClick={handleGoBack} className="w-full flex justify-center items-center bg-gray-300 text-black py-2 rounded hover:bg-gray-400 transition-colors"><MdArrowBack className="mr-2" /> Edit contact details</button>
               </form>
             )}
 
@@ -270,24 +229,28 @@ const Checkout = () => {
               <div className="bg-white p-4 rounded shadow-md flex flex-col gap-4">
                 <div className="text-center">
                   <h2 className="text-2xl font-semibold">Pay with Stellar USDC</h2>
-                  <p className="text-gray-600 mt-1">Amount due: ${totalPrice.toFixed(2)}</p>
+                  {quotedUsd !== null ? (
+                    <p className="text-gray-700 mt-1 font-medium">Merchant quote: ${quotedUsd.toFixed(2)}</p>
+                  ) : totalPrice > 0 ? (
+                    <p className="text-gray-500 mt-1">Cart estimate: ${totalPrice.toFixed(2)} · merchant quote pending</p>
+                  ) : (
+                    <p className="text-gray-500 mt-1">Merchant quote will be loaded from the catalog.</p>
+                  )}
                   <p className="text-xs text-gray-500 mt-1">Order {orderId}</p>
                 </div>
                 <StellarWalletButton />
-                <StellarCheckoutButton amountUsd={totalPrice} orderId={orderId} onSuccess={handleStellarSuccess} />
+                <StellarCheckoutButton productIds={productIds} orderId={orderId} onQuote={setPaymentQuote} onSuccess={handleStellarSuccess} />
                 <StellarOrderWatch
                   orderId={orderId}
-                  expectedAmountRaw={expectedAmountRaw}
-                  expectedTokenContractId={expectedTokenContractId}
-                  enabled
+                  expectedAmountRaw={paymentQuote?.amountRaw || ""}
+                  expectedTokenContractId={paymentQuote?.tokenContractId || ""}
+                  enabled={Boolean(paymentQuote)}
                   onEvent={handleObservedPayment}
                 />
                 <p className="text-[11px] text-gray-500 text-center">
-                  The order stays open until this exact order ID, USDC token, and raw cart total are confirmed on-chain. Email verification alone never clears your cart.
+                  The order stays open until this exact signed merchant quote, order ID, token, and raw amount are confirmed on-chain. Browser-stored totals and email verification never clear your cart.
                 </p>
-                <button type="button" onClick={handleGoBack} className="w-full flex justify-center items-center bg-gray-300 text-black py-2 rounded hover:bg-gray-400 transition-colors">
-                  <MdArrowBack className="mr-2" /> Back to verification
-                </button>
+                <button type="button" onClick={handleGoBack} className="w-full flex justify-center items-center bg-gray-300 text-black py-2 rounded hover:bg-gray-400 transition-colors"><MdArrowBack className="mr-2" /> Back to verification</button>
               </div>
             )}
 
@@ -297,9 +260,7 @@ const Checkout = () => {
                 <h2 className="text-4xl mb-4 text-center font-bold">Payment confirmed.</h2>
                 <p className="text-center">Your paid order {orderId} is complete.</p>
                 <span className="text-center text-gray-600">Thanks for shopping with us.</span>
-                <Link href="/shop" className="text-center mt-8 py-2 bg-purple-700 text-white hover:bg-purple-600 rounded-md px-4">
-                  Back to Shop
-                </Link>
+                <Link href="/shop" className="text-center mt-8 py-2 bg-purple-700 text-white hover:bg-purple-600 rounded-md px-4">Back to Shop</Link>
               </div>
             )}
           </div>

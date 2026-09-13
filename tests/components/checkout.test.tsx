@@ -9,12 +9,35 @@ vi.mock("../../lib/sendmail", () => ({
   default: vi.fn(),
 }));
 
+const mockQuote = {
+  amountCents: 10000,
+  amountRaw: "1000000000",
+  itemCount: 1,
+  orderId: "mocked-by-component",
+  buyerPublicKey: "GMOCK",
+  tokenContractId: "CMOCK",
+  contractId: "CMOCKCHECKOUT",
+  expiresAt: 2000000000,
+  signatureHex: "ab".repeat(64),
+};
+
 vi.mock("../../components/StellarCheckoutButton", () => ({
-  default: ({ onSuccess }: { onSuccess: (result: { amountUsd: number }) => void }) => (
-    <button type="button" data-testid="stellar-checkout-button" onClick={() => onSuccess({ amountUsd: 100 })}>
-      Mock Stellar payment
-    </button>
-  ),
+  default: ({
+    onQuote,
+    onSuccess,
+  }: {
+    onQuote?: (quote: typeof mockQuote) => void;
+    onSuccess: (result: { amountUsd: number }) => void;
+  }) => {
+    React.useEffect(() => {
+      onQuote?.(mockQuote);
+    }, [onQuote]);
+    return (
+      <button type="button" data-testid="stellar-checkout-button" onClick={() => onSuccess({ amountUsd: 100 })}>
+        Mock Stellar payment
+      </button>
+    );
+  },
 }));
 
 vi.mock("../../components/StellarWalletButton", () => ({
@@ -22,8 +45,8 @@ vi.mock("../../components/StellarWalletButton", () => ({
 }));
 
 vi.mock("../../components/StellarOrderWatch", () => ({
-  default: ({ onEvent }: { onEvent: () => void }) => (
-    <button type="button" data-testid="stellar-order-watch" onClick={onEvent}>
+  default: ({ enabled, onEvent }: { enabled: boolean; onEvent: () => void }) => (
+    <button type="button" data-testid="stellar-order-watch" disabled={!enabled} onClick={onEvent}>
       Mock on-chain payment
     </button>
   ),
@@ -63,6 +86,7 @@ async function advanceToPayment() {
   fireEvent.change(screen.getByLabelText("Verification code"), { target: { value: "000042" } });
   fireEvent.click(screen.getByRole("button", { name: /^verify email$/i }));
   await screen.findByTestId("stellar-checkout-button");
+  await waitFor(() => expect(screen.getByTestId("stellar-order-watch")).toBeEnabled());
 }
 
 describe("Checkout paid-completion integrity", () => {
@@ -107,7 +131,7 @@ describe("Checkout paid-completion integrity", () => {
   it("treats a correct OTP as contact verification, not payment", async () => {
     await advanceToPayment();
 
-    expect(screen.getByText(/amount due: \$100\.00/i)).toBeInTheDocument();
+    expect(screen.getByText(/merchant quote: \$100\.00/i)).toBeInTheDocument();
     expect(screen.queryByText(/payment confirmed\./i)).not.toBeInTheDocument();
     expect(localStorage.getItem("cartItems")).toBe(storedCartItems);
     expect(localStorage.getItem("itemCount")).toBe("1");
@@ -116,7 +140,6 @@ describe("Checkout paid-completion integrity", () => {
 
   it("clears the cart and shows completion only after Stellar payment success", async () => {
     await advanceToPayment();
-
     fireEvent.click(screen.getByTestId("stellar-checkout-button"));
 
     expect(await screen.findByRole("heading", { name: /payment confirmed/i })).toBeInTheDocument();
@@ -125,9 +148,8 @@ describe("Checkout paid-completion integrity", () => {
     expect(localStorage.getItem("totalPrice")).toBeNull();
   });
 
-  it("accepts the matching on-chain order event as an authoritative payment receipt", async () => {
+  it("accepts only a quote-enabled matching on-chain order event as payment authority", async () => {
     await advanceToPayment();
-
     fireEvent.click(screen.getByTestId("stellar-order-watch"));
 
     expect(await screen.findByRole("heading", { name: /payment confirmed/i })).toBeInTheDocument();
@@ -138,7 +160,6 @@ describe("Checkout paid-completion integrity", () => {
     vi.mocked(sendMail).mockRejectedValueOnce(new Error("mail unavailable"));
     render(<Checkout />);
     fillContactDetails();
-
     fireEvent.click(screen.getByRole("button", { name: /send verification code/i }));
 
     await waitFor(() => {
@@ -151,8 +172,6 @@ describe("Checkout paid-completion integrity", () => {
   it.each([
     { state: "missing cart", items: null, total: null },
     { state: "empty items with a stale positive total", items: "[]", total: "100" },
-    { state: "items with a zero total", items: storedCartItems, total: "0" },
-    { state: "items with a malformed total", items: storedCartItems, total: "not-a-number" },
   ])("keeps the empty-cart screen for $state", ({ items, total }) => {
     localStorage.clear();
     if (items !== null) localStorage.setItem("cartItems", items);
@@ -162,5 +181,16 @@ describe("Checkout paid-completion integrity", () => {
     expect(screen.getByRole("heading", { name: "Your cart is empty" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /back to shop/i })).toHaveAttribute("href", "/shop");
     expect(sendMail).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { total: "0", label: "zero" },
+    { total: "not-a-number", label: "malformed" },
+  ])("does not treat a $label browser total as payment authority", ({ total }) => {
+    localStorage.setItem("totalPrice", total);
+    render(<Checkout />);
+
+    expect(screen.queryByRole("heading", { name: "Your cart is empty" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /send verification code/i })).toBeEnabled();
   });
 });

@@ -2,8 +2,8 @@ import { xdr, Address, scValToNative } from "@stellar/stellar-sdk";
 
 // ---------------------------------------------------------------------------
 // ScVal construction + decoding helpers for the checkout contract.
-// The contract `pay` signature is:
-//   pay(token: Address, buyer: Address, order_id: BytesN<32>, amount: i128)
+// The authoritative payment signature is:
+//   pay_with_quote(token, buyer, order_id, amount, expires_at, quote_signature)
 // ---------------------------------------------------------------------------
 
 /**
@@ -18,9 +18,16 @@ export function i128ToScVal(value: bigint | number | string): xdr.ScVal {
   return xdr.ScVal.scvI128(new xdr.Int128Parts({ lo, hi }));
 }
 
-/**
- * Build a BytesN<32> ScVal from a Uint8Array (or hex string).
- */
+/** Build a u64 ScVal, used by signed quote expiries. */
+export function u64ToScVal(value: bigint | number | string): xdr.ScVal {
+  const v = BigInt(value);
+  if (v < 0n || v > 0xffffffffffffffffn) {
+    throw new Error("u64 value is out of range");
+  }
+  return xdr.ScVal.scvU64(new xdr.Uint64(v));
+}
+
+/** Build a BytesN<32> ScVal from a Uint8Array (or hex string). */
 export function bytes32ToScVal(bytes: Uint8Array | string): xdr.ScVal {
   const buf = typeof bytes === "string" ? Buffer.from(hexToBytes(bytes)) : Buffer.from(bytes);
   if (buf.length !== 32) {
@@ -29,16 +36,21 @@ export function bytes32ToScVal(bytes: Uint8Array | string): xdr.ScVal {
   return xdr.ScVal.scvBytes(buf);
 }
 
-/**
- * Build an Address ScVal from a G... / C... strkey.
- */
+/** Build a BytesN<64> ScVal from a Uint8Array (or hex string). */
+export function bytes64ToScVal(bytes: Uint8Array | string): xdr.ScVal {
+  const buf = typeof bytes === "string" ? Buffer.from(hexToBytes(bytes)) : Buffer.from(bytes);
+  if (buf.length !== 64) {
+    throw new Error(`signature must be exactly 64 bytes (got ${buf.length})`);
+  }
+  return xdr.ScVal.scvBytes(buf);
+}
+
+/** Build an Address ScVal from a G... / C... strkey. */
 export function addressToScVal(address: string): xdr.ScVal {
   return new Address(address).toScVal();
 }
 
-/**
- * Build a Symbol ScVal.
- */
+/** Build a Symbol ScVal. */
 export function symbolToScVal(symbol: string): xdr.ScVal {
   return xdr.ScVal.scvSymbol(symbol);
 }
@@ -47,10 +59,7 @@ export function symbolToScVal(symbol: string): xdr.ScVal {
 // Decoding
 // ---------------------------------------------------------------------------
 
-/**
- * Decode any ScVal to a string for display/logging. Handles symbols, strings,
- * addresses, bytes (hex), numbers/bigints and maps/vecs (JSON).
- */
+/** Decode any ScVal to a string for display/logging. */
 export function scValToString(scVal: xdr.ScVal): string {
   const typeName = scVal.switch();
   if (typeName === xdr.ScValType.scvSymbol()) {
@@ -84,9 +93,6 @@ export function scValToString(scVal: xdr.ScVal): string {
   }
 }
 
-/**
- * Decode an ScVal to a native JS value (BigInt for integers).
- */
 export function scValToNativeSafe(scVal: xdr.ScVal): unknown {
   try {
     return scValToNative(scVal);
@@ -123,9 +129,7 @@ export function bytesToHex(bytes: Uint8Array): string {
     .join("");
 }
 
-/**
- * SHA-256 a string order id into a 32-byte value accepted by the contract.
- */
+/** SHA-256 a string order id into a 32-byte value accepted by the contract. */
 export async function hashOrderId(orderId: string): Promise<Uint8Array> {
   const data = new TextEncoder().encode(orderId);
   const digest = await crypto.subtle.digest("SHA-256", data);
