@@ -23,8 +23,8 @@ describe("orders ownership RLS contract", () => {
 
     expect(policy).not.toBe("");
     expect(policy).toMatch(/to authenticated/i);
-    expect(policy).toMatch(/using \(auth\.uid\(\) = user_id\)/i);
-    expect(policy).not.toMatch(/auth\.email\(\) = user_email/i);
+    expect(policy).toMatch(/using \(\(select auth\.uid\(\)\) = user_id\)/i);
+    expect(policy).not.toMatch(/auth\.email\(\)/i);
   });
 
   it("does not grant anonymous order inserts", () => {
@@ -36,11 +36,12 @@ describe("orders ownership RLS contract", () => {
     expect(policy).not.toMatch(/with check \(true\)/i);
   });
 
-  it("binds every inserted row to auth.uid and validates any supplied email", () => {
+  it("binds every inserted row to auth.uid and validates any supplied JWT email", () => {
     const policy = policySql("Users can insert orders");
 
-    expect(policy).toMatch(/auth\.uid\(\) = user_id/i);
+    expect(policy).toMatch(/\(select auth\.uid\(\)\) = user_id/i);
     expect(policy).toMatch(/user_email is null/i);
-    expect(policy).toMatch(/lower\(auth\.email\(\)\) = lower\(user_email\)/i);
+    expect(policy).toMatch(/lower\(\(select auth\.jwt\(\) ->> 'email'\)\) = lower\(user_email\)/i);
+    expect(policy).not.toMatch(/auth\.email\(\)/i);
   });
 });
