@@ -11,7 +11,7 @@ import StellarOrderWatch from "../../components/StellarOrderWatch";
 import StellarWalletButton from "../../components/StellarWalletButton";
 import Toast from "../../components/Toast";
 import useToast from "../../hooks/useToast";
-import { savePaidBuyerOrderOnce } from "../../lib/buyer-orders";
+import { saveCheckoutPaidOrder } from "../../lib/checkout-paid-order";
 import sendMail from "../../lib/sendmail";
 import { usdToRawUnits } from "../../lib/stellar/checkout";
 import { defaultToken } from "../../lib/stellar/config";
@@ -66,9 +66,10 @@ const Checkout = () => {
     setPersistenceError("");
     setIsPersistingPaidOrder(true);
 
-    const task = (async () => {
+    let task: Promise<void>;
+    task = (async () => {
       try {
-        await savePaidBuyerOrderOnce({
+        await saveCheckoutPaidOrder({
           orderId,
           total: confirmation.amountUsd,
           tokenSymbol: "USDC",
@@ -84,9 +85,10 @@ const Checkout = () => {
           },
         });
 
-        // Paid cart teardown is deliberately last. If persistence fails, keep
-        // every cart field intact and suppress the payment controls so the buyer
-        // cannot accidentally submit a second payment for the same confirmed order.
+        // Paid cart teardown is deliberately last. Authenticated purchases must
+        // reach merchant-side Supabase durability; guest purchases retain their
+        // explicit device-local contract. If persistence fails, keep every cart
+        // field intact and suppress payment controls so a buyer cannot double-pay.
         clearPaidCart();
         setPaymentComplete(true);
         showToast(confirmation.message);
