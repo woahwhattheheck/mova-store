@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useRef, useState, useEffect } from "react";
 import Link from "next/link";
 import { AiOutlineLoading3Quarters } from "react-icons/ai";
 import { MdArrowBack } from "react-icons/md";
@@ -11,10 +11,30 @@ import StellarOrderWatch from "../../components/StellarOrderWatch";
 import StellarWalletButton from "../../components/StellarWalletButton";
 import Toast from "../../components/Toast";
 import useToast from "../../hooks/useToast";
+import { saveCheckoutPaidOrder } from "../../lib/checkout-paid-order";
 import { cartItemsToQuoteItems } from "../../lib/checkout-quote";
 import sendMail from "../../lib/sendmail";
+import { defaultToken } from "../../lib/stellar/config";
+import type { IndexedEvent } from "../../lib/stellar/indexer";
 import type { RegisteredQuote } from "../../lib/stellar/quote-client";
 import { validateAddress, validateEmail, validateName, validateOTP } from "../../lib/validation";
+
+type ConfirmedPayment = {
+  orderId: string;
+  amountUsd: number;
+  txHash?: string;
+  ledger?: number;
+  message: string;
+};
+
+function quoteAmountUsd(quote: RegisteredQuote): number {
+  const decimals = defaultToken().decimals;
+  const amount = Number(quote.amountRaw) / 10 ** decimals;
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new Error("Merchant quote amount could not be represented for fulfillment");
+  }
+  return amount;
+}
 
 const Checkout = () => {
   const [otp] = useState<string>(() =>
@@ -29,7 +49,11 @@ const Checkout = () => {
   const [enteredOtp, setEnteredOtp] = useState("");
   const [paymentComplete, setPaymentComplete] = useState(false);
   const [registeredQuote, setRegisteredQuote] = useState<RegisteredQuote | null>(null);
+  const [confirmedPayment, setConfirmedPayment] = useState<ConfirmedPayment | null>(null);
+  const [isPersistingPaidOrder, setIsPersistingPaidOrder] = useState(false);
+  const [persistenceError, setPersistenceError] = useState("");
   const [paidOrderId, setPaidOrderId] = useState("");
+  const paidOrderPersistenceRef = useRef<Promise<void> | null>(null);
   const { toast, showToast, hideToast } = useToast(5000);
   const [formData, setFormData] = useState({
     firstName: "",
@@ -53,27 +77,94 @@ const Checkout = () => {
     localStorage.removeItem("totalPrice");
   };
 
-  const completePaidOrder = (orderId: string, message: string) => {
-    if (paymentComplete) return;
-    clearPaidCart();
-    setPaidOrderId(orderId);
-    setPaymentComplete(true);
-    showToast(message);
+  const persistConfirmedOrder = (confirmation: ConfirmedPayment) => {
+    if (paymentComplete || paidOrderPersistenceRef.current) return;
+
+    setConfirmedPayment(confirmation);
+    setPersistenceError("");
+    setIsPersistingPaidOrder(true);
+
+    const request = (async () => {
+      try {
+        await saveCheckoutPaidOrder({
+          orderId: confirmation.orderId,
+          total: confirmation.amountUsd,
+          tokenSymbol: "USDC",
+          tokenAmount: confirmation.amountUsd,
+          txHash: confirmation.txHash,
+          ledger: confirmation.ledger,
+          items: cartItems,
+          fulfillment: {
+            firstName: formData.firstName,
+            lastName: formData.lastName,
+            email: formData.email,
+            address: formData.address,
+          },
+        });
+
+        clearPaidCart();
+        setPaidOrderId(confirmation.orderId);
+        setPaymentComplete(true);
+        showToast(confirmation.message);
+      } catch (error) {
+        const message =
+          error instanceof Error && error.message
+            ? error.message
+            : "Could not persist paid order details to merchant fulfillment";
+        setPersistenceError(message);
+        showToast("Payment is confirmed, but order details still need to be saved. Retry saving; do not pay again.");
+      } finally {
+        paidOrderPersistenceRef.current = null;
+        setIsPersistingPaidOrder(false);
+      }
+    })();
+
+    paidOrderPersistenceRef.current = request;
   };
 
-  const handleStellarSuccess = (result: { amountUsd: number | string; orderId: string }) => {
-    completePaidOrder(
-      result.orderId,
-      `USDC payment received ✓ $${Number(result.amountUsd).toFixed(2)} · order ${result.orderId}`
-    );
+  const handleStellarSuccess = (result: {
+    amountUsd: number | string;
+    orderId: string;
+    hash?: string;
+    receipt?: { ledger?: number };
+  }) => {
+    const amountUsd = Number(result.amountUsd);
+    if (!Number.isFinite(amountUsd) || amountUsd <= 0) {
+      showToast("Payment was confirmed, but its merchant amount could not be persisted. Do not pay again.");
+      return;
+    }
+
+    persistConfirmedOrder({
+      orderId: result.orderId,
+      amountUsd,
+      txHash: result.hash,
+      ledger: result.receipt?.ledger,
+      message: `USDC payment received ✓ $${amountUsd.toFixed(2)} · order ${result.orderId}`,
+    });
   };
 
-  const handleObservedPayment = () => {
-    if (!registeredQuote) return;
-    completePaidOrder(
-      registeredQuote.orderId,
-      `USDC payment detected on-chain ✓ · order ${registeredQuote.orderId}`
-    );
+  const handleObservedPayment = (event: IndexedEvent) => {
+    if (!registeredQuote || confirmedPayment || paymentComplete) return;
+
+    let amountUsd: number;
+    try {
+      amountUsd = quoteAmountUsd(registeredQuote);
+    } catch {
+      showToast("Payment was detected, but its merchant amount could not be persisted. Do not pay again.");
+      return;
+    }
+
+    persistConfirmedOrder({
+      orderId: registeredQuote.orderId,
+      amountUsd,
+      txHash: event.txHash,
+      ledger: event.ledger,
+      message: `USDC payment detected on-chain ✓ · order ${registeredQuote.orderId}`,
+    });
+  };
+
+  const retryPaidOrderPersistence = () => {
+    if (confirmedPayment) persistConfirmedOrder(confirmedPayment);
   };
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -140,7 +231,7 @@ const Checkout = () => {
   };
 
   const handleGoBack = () => {
-    if (stage > 1 && !paymentComplete) {
+    if (stage > 1 && !paymentComplete && !confirmedPayment && !isPersistingPaidOrder) {
       setStage((current) => current - 1);
       setIsSubmitting(false);
       setIsOtpSending(false);
@@ -292,35 +383,64 @@ const Checkout = () => {
                     The amount due and order ID are minted from the merchant-authorized quote, not browser storage.
                   </p>
                 </div>
-                <StellarWalletButton />
-                <StellarCheckoutButton
-                  items={quoteItems}
-                  displayAmountUsd={totalPrice > 0 ? totalPrice : undefined}
-                  onQuote={setRegisteredQuote}
-                  onSuccess={handleStellarSuccess}
-                  disabled={quoteItems.length === 0}
-                />
-                {quoteItems.length === 0 && (
-                  <p className="text-xs text-red-700 text-center" role="alert">
-                    This cart cannot be merchant-quoted. Return to the shop and re-add the products before paying.
-                  </p>
+
+                {confirmedPayment ? (
+                  <div className="rounded-md border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950" role="status">
+                    <p className="font-semibold">Payment confirmed. Saving merchant fulfillment record…</p>
+                    <p className="mt-1">
+                      Order {confirmedPayment.orderId} is already paid. Do not submit another payment.
+                    </p>
+                    {isPersistingPaidOrder && (
+                      <p className="mt-3 flex items-center justify-center gap-2">
+                        <AiOutlineLoading3Quarters className="animate-spin" /> Persisting paid order details…
+                      </p>
+                    )}
+                    {persistenceError && !isPersistingPaidOrder && (
+                      <div className="mt-3 space-y-3">
+                        <p className="text-red-700" role="alert">{persistenceError}</p>
+                        <button
+                          type="button"
+                          onClick={retryPaidOrderPersistence}
+                          className="w-full rounded bg-purple-700 px-4 py-2 font-semibold text-white hover:bg-purple-800"
+                        >
+                          Retry saving paid order
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <>
+                    <StellarWalletButton />
+                    <StellarCheckoutButton
+                      items={quoteItems}
+                      displayAmountUsd={totalPrice > 0 ? totalPrice : undefined}
+                      onQuote={setRegisteredQuote}
+                      onSuccess={handleStellarSuccess}
+                      disabled={quoteItems.length === 0}
+                    />
+                    {quoteItems.length === 0 && (
+                      <p className="text-xs text-red-700 text-center" role="alert">
+                        This cart cannot be merchant-quoted. Return to the shop and re-add the products before paying.
+                      </p>
+                    )}
+                    {registeredQuote && (
+                      <StellarOrderWatch
+                        orderId={registeredQuote.orderId}
+                        expectedAmountRaw={registeredQuote.amountRaw.toString()}
+                        expectedTokenContractId={registeredQuote.tokenContractId}
+                        expectedBuyer={registeredQuote.buyer}
+                        enabled
+                        onEvent={handleObservedPayment}
+                      />
+                    )}
+                    <p className="text-[11px] text-gray-500 text-center">
+                      The order stays open until this exact merchant-created order ID, buyer, USDC token, and raw quoted amount are confirmed on-chain. After confirmation, your cart stays intact until the merchant fulfillment record is durable.
+                    </p>
+                    <button type="button" onClick={handleGoBack} className="w-full flex justify-center items-center bg-gray-300 text-black py-2 rounded hover:bg-gray-400 transition-colors">
+                      <MdArrowBack className="mr-2" /> Back to verification
+                    </button>
+                  </>
                 )}
-                {registeredQuote && (
-                  <StellarOrderWatch
-                    orderId={registeredQuote.orderId}
-                    expectedAmountRaw={registeredQuote.amountRaw.toString()}
-                    expectedTokenContractId={registeredQuote.tokenContractId}
-                    expectedBuyer={registeredQuote.buyer}
-                    enabled
-                    onEvent={handleObservedPayment}
-                  />
-                )}
-                <p className="text-[11px] text-gray-500 text-center">
-                  The order stays open until this exact merchant-created order ID, buyer, USDC token, and raw quoted amount are confirmed on-chain. Email verification alone never clears your cart.
-                </p>
-                <button type="button" onClick={handleGoBack} className="w-full flex justify-center items-center bg-gray-300 text-black py-2 rounded hover:bg-gray-400 transition-colors">
-                  <MdArrowBack className="mr-2" /> Back to verification
-                </button>
               </div>
             )}
 

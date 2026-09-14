@@ -16,6 +16,13 @@ export interface OrderItem {
   img?: string;
 }
 
+export interface OrderFulfillment {
+  firstName: string;
+  lastName: string;
+  email: string;
+  address: string;
+}
+
 export interface BuyerOrder {
   id: string;
   orderId: string;
@@ -30,16 +37,254 @@ export interface BuyerOrder {
   txHash?: string;
   ledger?: number;
   items: OrderItem[];
+  /**
+   * Buyer-presented delivery/contact context captured only after a payment
+   * authority has already confirmed the order. It is fulfillment context, not
+   * pricing authority: merchant-authoritative quote validation remains a
+   * separate checkout boundary.
+   */
+  fulfillment?: OrderFulfillment;
+}
+
+export interface PaidOrderSnapshotInput {
+  orderId: string;
+  total: number;
+  items: unknown;
+  fulfillment: OrderFulfillment;
+  tokenSymbol?: string;
+  tokenAmount?: number;
+  txHash?: string;
+  ledger?: number;
+  createdAt?: string;
+}
+
+export interface SaveBuyerOrderOptions {
+  /** Fail unless the order reaches at least one persistence target. */
+  requirePersistence?: boolean;
+}
+
+interface StoredOrderEnvelope {
+  schemaVersion: 1;
+  lines: OrderItem[];
+  fulfillment: OrderFulfillment;
 }
 
 const STORAGE_KEY = "mova_buyer_orders";
+const MAX_ORDER_ID_LENGTH = 128;
+const MAX_ITEM_NAME_LENGTH = 512;
+const MAX_IMAGE_VALUE_LENGTH = 4096;
+const MAX_FULFILLMENT_VALUE_LENGTH = 4096;
+
+function normalizeRequiredText(value: unknown, field: string, maxLength: number): string {
+  if (typeof value !== "string") {
+    throw new Error(`${field} is required`);
+  }
+  const text = value.trim();
+  if (!text || text.length > maxLength) {
+    throw new Error(`${field} is invalid`);
+  }
+  return text;
+}
+
+function normalizeFulfillment(input: OrderFulfillment): OrderFulfillment {
+  return {
+    firstName: normalizeRequiredText(
+      input?.firstName,
+      "Fulfillment first name",
+      MAX_FULFILLMENT_VALUE_LENGTH
+    ),
+    lastName: normalizeRequiredText(
+      input?.lastName,
+      "Fulfillment last name",
+      MAX_FULFILLMENT_VALUE_LENGTH
+    ),
+    email: normalizeRequiredText(
+      input?.email,
+      "Fulfillment email",
+      MAX_FULFILLMENT_VALUE_LENGTH
+    ),
+    address: normalizeRequiredText(
+      input?.address,
+      "Fulfillment address",
+      MAX_FULFILLMENT_VALUE_LENGTH
+    ),
+  };
+}
+
+function normalizeSnapshotItems(input: unknown): OrderItem[] {
+  if (!Array.isArray(input) || input.length === 0) {
+    throw new Error("Paid order snapshot must contain at least one line item");
+  }
+
+  return input.map((raw, index) => {
+    if (!raw || typeof raw !== "object") {
+      throw new Error(`Paid order line ${index + 1} is invalid`);
+    }
+    const row = raw as Record<string, unknown>;
+    const name = normalizeRequiredText(
+      row.name,
+      `Paid order line ${index + 1} name`,
+      MAX_ITEM_NAME_LENGTH
+    );
+    const price = typeof row.price === "number" ? row.price : Number(row.price);
+    if (!Number.isFinite(price) || price < 0) {
+      throw new Error(`Paid order line ${index + 1} price is invalid`);
+    }
+
+    const quantityValue = row.quantity ?? 1;
+    const quantity =
+      typeof quantityValue === "number" ? quantityValue : Number(quantityValue);
+    if (!Number.isSafeInteger(quantity) || quantity < 1) {
+      throw new Error(`Paid order line ${index + 1} quantity is invalid`);
+    }
+
+    const item: OrderItem = { name, price, quantity };
+    if (typeof row.id === "string" || typeof row.id === "number") {
+      item.id = row.id;
+    }
+    if (typeof row.img === "string") {
+      const img = row.img.trim();
+      if (img.length > MAX_IMAGE_VALUE_LENGTH) {
+        throw new Error(`Paid order line ${index + 1} image value is invalid`);
+      }
+      if (img) item.img = img;
+    }
+    return item;
+  });
+}
+
+function cloneOrderItems(items: OrderItem[]): OrderItem[] {
+  return items.map((item) => ({ ...item }));
+}
+
+function serializeStoredOrder(order: BuyerOrder): OrderItem[] | StoredOrderEnvelope {
+  if (!order.fulfillment) {
+    return cloneOrderItems(order.items);
+  }
+  return {
+    schemaVersion: 1,
+    lines: cloneOrderItems(order.items),
+    fulfillment: { ...order.fulfillment },
+  };
+}
+
+function parseStoredOrder(value: unknown): {
+  items: OrderItem[];
+  fulfillment?: OrderFulfillment;
+} {
+  if (Array.isArray(value)) {
+    return {
+      items: value.filter((item): item is OrderItem => Boolean(item && typeof item === "object")),
+    };
+  }
+
+  if (!value || typeof value !== "object") {
+    return { items: [] };
+  }
+
+  const envelope = value as Partial<StoredOrderEnvelope>;
+  if (envelope.schemaVersion !== 1 || !Array.isArray(envelope.lines)) {
+    return { items: [] };
+  }
+
+  const items = envelope.lines.filter(
+    (item): item is OrderItem => Boolean(item && typeof item === "object")
+  );
+  try {
+    const fulfillment = envelope.fulfillment
+      ? normalizeFulfillment(envelope.fulfillment)
+      : undefined;
+    return { items, fulfillment };
+  } catch {
+    // A malformed optional fulfillment envelope must not make historical order
+    // lines unreadable. The line items remain available while bad context is
+    // dropped fail-closed.
+    return { items };
+  }
+}
+
+function paidCommerceFingerprint(order: Pick<
+  BuyerOrder,
+  "orderId" | "total" | "paymentMethod" | "tokenSymbol" | "tokenAmount" | "items" | "fulfillment"
+>): string {
+  return JSON.stringify({
+    orderId: order.orderId,
+    total: order.total,
+    paymentMethod: order.paymentMethod,
+    tokenSymbol: order.tokenSymbol ?? null,
+    tokenAmount: order.tokenAmount ?? null,
+    items: order.items,
+    fulfillment: order.fulfillment ?? null,
+  });
+}
+
+/**
+ * Build a detached fulfillment snapshot for a payment that has already been
+ * authoritatively confirmed by the caller. Browser cart names/prices are kept
+ * only as buyer-presented fulfillment context; this function does not elevate
+ * them into merchant pricing authority.
+ */
+export function createPaidBuyerOrderSnapshot(input: PaidOrderSnapshotInput): BuyerOrder {
+  const orderId = normalizeRequiredText(input.orderId, "Order id", MAX_ORDER_ID_LENGTH);
+  if (!Number.isFinite(input.total) || input.total <= 0) {
+    throw new Error("Paid order total is invalid");
+  }
+
+  const tokenAmount = input.tokenAmount ?? input.total;
+  if (!Number.isFinite(tokenAmount) || tokenAmount <= 0) {
+    throw new Error("Paid order token amount is invalid");
+  }
+  if (input.ledger !== undefined && (!Number.isSafeInteger(input.ledger) || input.ledger < 0)) {
+    throw new Error("Paid order ledger is invalid");
+  }
+  if (input.txHash !== undefined && typeof input.txHash !== "string") {
+    throw new Error("Paid order transaction hash is invalid");
+  }
+
+  return {
+    id: `paid-${orderId}`,
+    orderId,
+    createdAt: input.createdAt ?? new Date().toISOString(),
+    total: input.total,
+    status: "Paid",
+    paymentMethod: "stellar",
+    tokenSymbol: input.tokenSymbol ?? "USDC",
+    tokenAmount,
+    txHash: input.txHash?.trim() || undefined,
+    ledger: input.ledger,
+    items: normalizeSnapshotItems(input.items),
+    fulfillment: normalizeFulfillment(input.fulfillment),
+  };
+}
+
+/**
+ * Persist a paid commerce snapshot once per order id. Repeated callbacks with
+ * the same commerce payload are harmless, while a conflicting terminal order
+ * id fails closed instead of silently rewriting fulfillment evidence.
+ */
+export async function savePaidBuyerOrderOnce(
+  input: PaidOrderSnapshotInput
+): Promise<BuyerOrder> {
+  const candidate = createPaidBuyerOrderSnapshot(input);
+  const existing = getCachedBuyerOrders().find((order) => order.orderId === candidate.orderId);
+  if (existing && ["Paid", "Shipped", "Refunded", "Completed"].includes(existing.status)) {
+    if (paidCommerceFingerprint(existing) !== paidCommerceFingerprint(candidate)) {
+      throw new Error("Paid order id already has conflicting commerce evidence");
+    }
+    return existing;
+  }
+  return saveBuyerOrder(candidate, { requirePersistence: true });
+}
 
 /**
  * Saves an order to the local cache and, when signed in, persists it to Supabase.
  * The active Supabase session is authoritative for ownership. Guest orders remain
  * device-local and never attempt a remote insert.
  */
-export async function saveBuyerOrder(order: BuyerOrder): Promise<BuyerOrder> {
+export async function saveBuyerOrder(
+  order: BuyerOrder,
+  options: SaveBuyerOrderOptions = {}
+): Promise<BuyerOrder> {
   let sessionUser: { id: string; email?: string | null } | null = null;
 
   try {
@@ -61,12 +306,19 @@ export async function saveBuyerOrder(order: BuyerOrder): Promise<BuyerOrder> {
         ...order,
         userId: sessionUser.id,
         userEmail: sessionUser.email || undefined,
+        items: cloneOrderItems(order.items),
+        fulfillment: order.fulfillment ? { ...order.fulfillment } : undefined,
       }
     : {
         ...order,
         userId: undefined,
         userEmail: undefined,
+        items: cloneOrderItems(order.items),
+        fulfillment: order.fulfillment ? { ...order.fulfillment } : undefined,
       };
+
+  let localPersistenceSucceeded = false;
+  let remotePersistenceSucceeded = false;
 
   // 1. Cache locally using only session-derived ownership.
   try {
@@ -79,6 +331,7 @@ export async function saveBuyerOrder(order: BuyerOrder): Promise<BuyerOrder> {
     }
     if (typeof window !== "undefined") {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(cached));
+      localPersistenceSucceeded = true;
     }
   } catch (err) {
     console.warn("Failed to cache order to localStorage:", err);
@@ -100,7 +353,7 @@ export async function saveBuyerOrder(order: BuyerOrder): Promise<BuyerOrder> {
           token_symbol: order.tokenSymbol || null,
           token_amount: order.tokenAmount || null,
           tx_hash: order.txHash || null,
-          items: order.items,
+          items: serializeStoredOrder(cachedOrder),
           created_at: order.createdAt,
         },
       ]);
@@ -108,11 +361,16 @@ export async function saveBuyerOrder(order: BuyerOrder): Promise<BuyerOrder> {
       if (error) {
         throw new Error(error.message);
       }
+      remotePersistenceSucceeded = true;
     } catch (err) {
       // Supabase may be unavailable in dev/offline; the local cache above keeps
       // the order accessible without weakening the database ownership boundary.
       console.warn("Could not insert order into Supabase, kept in local cache:", err);
     }
+  }
+
+  if (options.requirePersistence && !localPersistenceSucceeded && !remotePersistenceSucceeded) {
+    throw new Error("Could not persist paid order details");
   }
 
   return cachedOrder;
@@ -174,21 +432,25 @@ export async function fetchBuyerOrders(userEmailOrId?: string): Promise<BuyerOrd
       }
 
       if (res.data && Array.isArray(res.data) && res.data.length > 0) {
-        orders = res.data.map((row: any) => ({
-          id: row.id || row.order_id,
-          orderId: row.order_id || row.id,
-          userId: row.user_id,
-          userEmail: row.user_email,
-          createdAt: row.created_at || new Date().toISOString(),
-          total: Number(row.total) || 0,
-          status: row.status || "Paid",
-          paymentMethod: row.payment_method || "stellar",
-          tokenSymbol: row.token_symbol || "USDC",
-          tokenAmount: row.token_amount ? Number(row.token_amount) : undefined,
-          txHash: row.tx_hash,
-          ledger: row.ledger,
-          items: Array.isArray(row.items) ? row.items : [],
-        }));
+        orders = res.data.map((row: any) => {
+          const stored = parseStoredOrder(row.items);
+          return {
+            id: row.id || row.order_id,
+            orderId: row.order_id || row.id,
+            userId: row.user_id,
+            userEmail: row.user_email,
+            createdAt: row.created_at || new Date().toISOString(),
+            total: Number(row.total) || 0,
+            status: row.status || "Paid",
+            paymentMethod: row.payment_method || "stellar",
+            tokenSymbol: row.token_symbol || "USDC",
+            tokenAmount: row.token_amount ? Number(row.token_amount) : undefined,
+            txHash: row.tx_hash,
+            ledger: row.ledger,
+            items: stored.items,
+            fulfillment: stored.fulfillment,
+          } as BuyerOrder;
+        });
       }
     }
   } catch (err) {
