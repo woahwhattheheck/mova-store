@@ -4,7 +4,6 @@ import {
   CHECKOUT_CONTRACT_ID,
   NETWORK_PASSPHRASE,
   RPC_URL,
-  TokenConfig,
   defaultToken,
   USDC_DECIMALS,
 } from "./config";
@@ -22,15 +21,19 @@ import { buildInvocationTransaction, budgetFee, prepareAndReport } from "./simul
 
 export { fundTestnetAccount } from "./account";
 
-export interface PayOptions {
-  /** Price in dollars (USD), converted to token raw units internally. */
-  amountUsd: number;
-  /** Human-readable order id (any string), hashed to 32 bytes for the contract. */
+export interface MerchantAuthorizedPaymentQuote {
   orderId: string;
-  /** Buyer's Freighter public key. */
+  orderIdHex: string;
+  buyer: string;
+  tokenContractId: string;
+  amountRaw: bigint;
+}
+
+export interface PayOptions {
+  /** Registered merchant quote returned by the same-origin quote flow. */
+  quote: MerchantAuthorizedPaymentQuote;
+  /** Buyer's Freighter public key; must exactly match quote.buyer. */
   publicKey: string;
-  /** Token to pay with (defaults to the first supported token, USDC). */
-  token?: TokenConfig;
   /** Called with human-readable progress updates. */
   onStatus?: (status: string) => void;
 }
@@ -39,6 +42,8 @@ export interface PayResult {
   hash: string;
   status: string;
   receipt: PaymentReceipt;
+  orderId: string;
+  buyer: string;
   amountUsd: number;
   amountRaw: bigint;
   /** Pre-flight simulation details (see lib/stellar/simulate.ts). */
@@ -52,6 +57,7 @@ export interface PayResult {
 export interface ExpectedPaymentReceipt {
   contractId: string;
   tokenContractId: string;
+  buyer: string;
   orderIdHex: string;
   amountRaw: bigint;
 }
@@ -62,7 +68,8 @@ function status(s: string): void {
 
 /**
  * Convert a USD amount to raw token units (7 decimals).
- * e.g. 12.34 -> 123_400_000
+ * Kept for display/test callers; live checkout payment authority uses the raw
+ * amount from a registered merchant quote instead.
  */
 export function usdToRawUnits(amountUsd: number): bigint {
   if (!Number.isFinite(amountUsd) || amountUsd <= 0) {
@@ -82,7 +89,8 @@ export async function orderIdHash(orderId: string): Promise<string> {
 
 /**
  * Successful transaction status alone is not payment authority. Require the
- * checkout contract to emit the exact token/order/amount receipt we intended.
+ * checkout contract to emit the exact buyer/token/order/amount receipt intended
+ * by the merchant-authorized quote.
  */
 export function assertExactPaymentReceipt(
   receipt: PaymentReceipt | null,
@@ -108,6 +116,7 @@ export function assertExactPaymentReceipt(
   const exactMatch =
     receipt.contractId === expected.contractId &&
     receipt.token === expected.tokenContractId &&
+    receipt.buyer === expected.buyer &&
     receipt.orderId?.toLowerCase() === expected.orderIdHex.toLowerCase() &&
     actualAmount === expected.amountRaw;
 
@@ -122,12 +131,17 @@ export function assertExactPaymentReceipt(
 }
 
 /**
- * Main flow: connect wallet -> readiness checks -> simulate -> prepare ->
- * sign -> submit -> wait -> decode + verify the exact payment receipt.
+ * Main flow: validate registered merchant quote -> readiness checks -> simulate
+ * -> sign -> submit -> decode + verify the exact payment receipt.
+ *
+ * Browser price/total fields are intentionally absent from this API. The raw
+ * amount and order identity come only from the quote that was registered by the
+ * merchant-authorized create_quote flow; the contract independently enforces
+ * that same pending tuple before transferring tokens.
  */
 export async function payWithStellar(options: PayOptions): Promise<PayResult> {
-  const { amountUsd, orderId, publicKey, onStatus = status } = options;
-  const token = options.token ?? defaultToken();
+  const { quote, publicKey, onStatus = status } = options;
+  const token = defaultToken();
 
   if (!CHECKOUT_CONTRACT_ID) {
     throw new WalletError(
@@ -135,10 +149,34 @@ export async function payWithStellar(options: PayOptions): Promise<PayResult> {
       "CONTRACT_NOT_CONFIGURED"
     );
   }
+  if (!quote || quote.buyer !== publicKey) {
+    throw new WalletError(
+      "Merchant quote was not authorized for this buyer.",
+      "QUOTE_BUYER_MISMATCH"
+    );
+  }
+  if (quote.tokenContractId !== token.contractId) {
+    throw new WalletError(
+      "Merchant quote token did not match checkout.",
+      "QUOTE_TOKEN_MISMATCH"
+    );
+  }
+  if (typeof quote.amountRaw !== "bigint" || quote.amountRaw <= BigInt(0)) {
+    throw new WalletError("Merchant quote amount was invalid.", "QUOTE_AMOUNT_INVALID");
+  }
+  if (!quote.orderId || !/^[0-9a-f]{64}$/i.test(quote.orderIdHex)) {
+    throw new WalletError("Merchant quote order identity was invalid.", "QUOTE_ORDER_MISMATCH");
+  }
 
-  const amountRaw = usdToRawUnits(amountUsd);
-  const orderBytes = await hashOrderId(orderId);
+  const amountRaw = quote.amountRaw;
+  const orderBytes = await hashOrderId(quote.orderId);
   const orderIdHex = bytesToHex(orderBytes);
+  if (orderIdHex.toLowerCase() !== quote.orderIdHex.toLowerCase()) {
+    throw new WalletError(
+      "Merchant quote order hash did not match its order identity.",
+      "QUOTE_ORDER_MISMATCH"
+    );
+  }
 
   // 1. Network guard.
   onStatus("Checking Freighter network…");
@@ -154,8 +192,8 @@ export async function payWithStellar(options: PayOptions): Promise<PayResult> {
     strict: true,
   });
 
-  // 3. Build the invocation.
-  onStatus("Building payment transaction…");
+  // 3. Build the invocation from the exact registered quote tuple.
+  onStatus("Building quoted payment transaction…");
   const args = [
     addressToScVal(token.contractId),
     addressToScVal(publicKey),
@@ -169,8 +207,8 @@ export async function payWithStellar(options: PayOptions): Promise<PayResult> {
     args
   );
 
-  // 4. Pre-flight simulation (surfaces errors early) + prepare.
-  onStatus("Simulating transaction…");
+  // 4. Pre-flight simulation (also proves the pending quote exists) + prepare.
+  onStatus("Simulating quoted transaction…");
   const { tx: prepared, report } = await prepareAndReport(server, tx);
   if (!report.ok || !readiness.account) {
     throw new WalletError(
@@ -207,6 +245,7 @@ export async function payWithStellar(options: PayOptions): Promise<PayResult> {
   const receipt = assertExactPaymentReceipt(decodePaymentEvent(txResult), {
     contractId: CHECKOUT_CONTRACT_ID,
     tokenContractId: token.contractId,
+    buyer: publicKey,
     orderIdHex,
     amountRaw,
   });
@@ -215,7 +254,9 @@ export async function payWithStellar(options: PayOptions): Promise<PayResult> {
     hash: sendResponse.hash,
     status: txResult.status,
     receipt,
-    amountUsd,
+    orderId: quote.orderId,
+    buyer: publicKey,
+    amountUsd: Number(amountRaw) / 10 ** USDC_DECIMALS,
     amountRaw,
     simulation: {
       minResourceFeeStroops: report.minResourceFee?.toString() ?? "0",
