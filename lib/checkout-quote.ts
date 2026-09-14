@@ -42,11 +42,27 @@ export interface CanonicalQuote {
   amountRaw: bigint;
 }
 
+export interface MerchantOrderIdentity {
+  cartDigestHex: string;
+  orderId: string;
+}
+
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const PRICE_RE = /^(?:0|[1-9]\d{0,9})(?:\.(\d{1,2}))?$/;
 const I128_MAX = (BigInt(1) << BigInt(127)) - BigInt(1);
 const RAW_UNITS_PER_CENT = BigInt(100_000);
+
+function normalizeProductId(value: unknown, index: number): string {
+  const productId = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (!UUID_RE.test(productId)) {
+    throw new QuoteValidationError(
+      "INVALID_PRODUCT_ID",
+      `Item ${index + 1} does not contain a canonical product id.`
+    );
+  }
+  return productId;
+}
 
 /**
  * Parse the only browser-controlled quote fields we accept. Any browser price,
@@ -70,13 +86,7 @@ export function normalizeQuoteItems(input: unknown): QuoteRequestItem[] {
     }
 
     const record = raw as Record<string, unknown>;
-    const productId = typeof record.productId === "string" ? record.productId.trim().toLowerCase() : "";
-    if (!UUID_RE.test(productId)) {
-      throw new QuoteValidationError(
-        "INVALID_PRODUCT_ID",
-        `Item ${index + 1} does not contain a canonical product id.`
-      );
-    }
+    const productId = normalizeProductId(record.productId, index);
 
     const quantity = record.quantity;
     if (
@@ -101,6 +111,71 @@ export function normalizeQuoteItems(input: unknown): QuoteRequestItem[] {
 
     return { productId, quantity };
   });
+}
+
+/**
+ * Convert the cart's per-copy rows into the product/quantity shape accepted by
+ * the merchant quote endpoint. Browser price/name/image/cartItemId data never
+ * enters the authority tuple. Multiplicity is preserved as quantity.
+ */
+export function cartItemsToQuoteItems(input: unknown): QuoteRequestItem[] {
+  if (!Array.isArray(input) || input.length === 0) {
+    throw new QuoteValidationError("EMPTY_QUOTE", "Quote must contain at least one item.");
+  }
+
+  const quantities = new Map<string, number>();
+  input.forEach((raw, index) => {
+    if (!raw || typeof raw !== "object") {
+      throw new QuoteValidationError("INVALID_PRODUCT_ID", `Item ${index + 1} is invalid.`);
+    }
+    const record = raw as Record<string, unknown>;
+    const productId = normalizeProductId(record.id, index);
+    const quantity = (quantities.get(productId) ?? 0) + 1;
+    if (quantity > MAX_QUANTITY_PER_LINE) {
+      throw new QuoteValidationError(
+        "INVALID_QUANTITY",
+        `Item ${index + 1} contains an invalid quantity.`
+      );
+    }
+    quantities.set(productId, quantity);
+  });
+
+  return normalizeQuoteItems(
+    Array.from(quantities, ([productId, quantity]) => ({ productId, quantity }))
+  );
+}
+
+/**
+ * Content-address the canonical product multiset. Sorting makes cart display
+ * order irrelevant while quantities preserve multiplicity. This digest is not
+ * a price authority; it commits the server-created order identity to exactly
+ * the product identities/quantities whose prices the server resolves.
+ */
+export async function quoteItemsDigestHex(items: QuoteRequestItem[]): Promise<string> {
+  const canonical = normalizeQuoteItems(items)
+    .map(({ productId, quantity }) => ({ productId, quantity }))
+    .sort((a, b) => a.productId.localeCompare(b.productId));
+  const bytes = new TextEncoder().encode(JSON.stringify(canonical));
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+  return Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * Server-minted order identity carrying the canonical cart digest plus a fresh
+ * nonce. The on-chain order key is SHA-256(orderId), so a paid receipt remains
+ * cryptographically bound to this cart commitment without exposing browser
+ * prices as authority.
+ */
+export async function buildMerchantOrderIdentity(
+  items: QuoteRequestItem[],
+  nonce: string = crypto.randomUUID()
+): Promise<MerchantOrderIdentity> {
+  const cartDigestHex = await quoteItemsDigestHex(items);
+  const orderId = `MQ1:${cartDigestHex}:${nonce}`;
+  if (orderId.length > 128) {
+    throw new QuoteValidationError("INVALID_PRODUCT_ID", "Merchant order identity is too long.");
+  }
+  return { cartDigestHex, orderId };
 }
 
 /** Convert a numeric(12,2) catalog price into exact 7-decimal USDC raw units. */
