@@ -65,5 +65,5 @@ before update on public.merchant_order_index
 for each row execute function public.protect_merchant_order_identity();
 
 revoke all on public.merchant_order_index from anon;
-revoke insert, update, delete on public.merchant_order_index from authenticated;
+revoke all on public.merchant_order_index from authenticated;
 grant select on public.merchant_order_index to authenticated;
