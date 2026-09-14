@@ -19,6 +19,7 @@ type PersistedOrderRow = {
   payment_method?: unknown;
   token_symbol?: unknown;
   token_amount?: unknown;
+  tx_hash?: unknown;
   items?: unknown;
 };
 
@@ -42,9 +43,28 @@ function canonicalFulfillment(value?: OrderFulfillment) {
   };
 }
 
+function canonicalTxHash(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const hash = value.trim().toLowerCase();
+  return hash || null;
+}
+
+function canonicalLedger(value: unknown): number | null {
+  const ledger = typeof value === "number" ? value : Number(value);
+  return Number.isSafeInteger(ledger) && ledger >= 0 ? ledger : null;
+}
+
 function paidCommerceFingerprint(order: Pick<
   BuyerOrder,
-  "orderId" | "total" | "paymentMethod" | "tokenSymbol" | "tokenAmount" | "items" | "fulfillment"
+  | "orderId"
+  | "total"
+  | "paymentMethod"
+  | "tokenSymbol"
+  | "tokenAmount"
+  | "txHash"
+  | "ledger"
+  | "items"
+  | "fulfillment"
 >): string {
   return JSON.stringify({
     orderId: order.orderId,
@@ -52,12 +72,18 @@ function paidCommerceFingerprint(order: Pick<
     paymentMethod: order.paymentMethod,
     tokenSymbol: order.tokenSymbol ?? null,
     tokenAmount: order.tokenAmount == null ? null : Number(order.tokenAmount),
+    txHash: canonicalTxHash(order.txHash),
+    ledger: canonicalLedger(order.ledger),
     items: order.items.map(canonicalItem),
     fulfillment: canonicalFulfillment(order.fulfillment),
   });
 }
 
-function parseRemoteItems(value: unknown): { items: OrderItem[]; fulfillment?: OrderFulfillment } {
+function parseRemoteItems(value: unknown): {
+  items: OrderItem[];
+  fulfillment?: OrderFulfillment;
+  ledger?: number;
+} {
   if (Array.isArray(value)) {
     return { items: value as OrderItem[] };
   }
@@ -69,6 +95,7 @@ function parseRemoteItems(value: unknown): { items: OrderItem[]; fulfillment?: O
     schemaVersion?: unknown;
     lines?: unknown;
     fulfillment?: unknown;
+    ledger?: unknown;
   };
   if (envelope.schemaVersion !== 1 || !Array.isArray(envelope.lines)) {
     return { items: [] };
@@ -78,7 +105,12 @@ function parseRemoteItems(value: unknown): { items: OrderItem[]; fulfillment?: O
     envelope.fulfillment && typeof envelope.fulfillment === "object"
       ? (envelope.fulfillment as OrderFulfillment)
       : undefined;
-  return { items: envelope.lines as OrderItem[], fulfillment };
+  const ledger = canonicalLedger(envelope.ledger);
+  return {
+    items: envelope.lines as OrderItem[],
+    fulfillment,
+    ledger: ledger ?? undefined,
+  };
 }
 
 function remoteCommerceOrder(row: PersistedOrderRow): BuyerOrder | null {
@@ -103,6 +135,8 @@ function remoteCommerceOrder(row: PersistedOrderRow): BuyerOrder | null {
     paymentMethod: row.payment_method === "card" ? "card" : "stellar",
     tokenSymbol: typeof row.token_symbol === "string" ? row.token_symbol : undefined,
     tokenAmount,
+    txHash: canonicalTxHash(row.tx_hash) ?? undefined,
+    ledger: stored.ledger,
     items: stored.items,
     fulfillment: stored.fulfillment,
   };
@@ -113,6 +147,7 @@ function storedEnvelope(order: BuyerOrder) {
     schemaVersion: 1,
     lines: order.items.map((item) => ({ ...item })),
     fulfillment: order.fulfillment ? { ...order.fulfillment } : undefined,
+    ledger: canonicalLedger(order.ledger) ?? undefined,
   };
 }
 
@@ -146,9 +181,9 @@ async function readOwnedRemoteOrder(orderId: string, userId: string): Promise<Bu
  *
  * The orders table has a unique order_id. If an insert reports an error, we
  * resolve that unique row through owner-RLS and accept it only when its commerce
- * fingerprint exactly matches the confirmed snapshot. This makes retries safe
- * both for ordinary duplicate callbacks and for ambiguous "write committed,
- * response lost" failures without allowing a conflicting order-id reuse.
+ * and payment identities exactly match the confirmed snapshot. Transaction hash
+ * is authoritative when present; ledger is persisted in the versioned items
+ * envelope so hashless confirmations still have an explicit retry identity.
  */
 export async function saveCheckoutPaidOrder(
   input: PaidOrderSnapshotInput
