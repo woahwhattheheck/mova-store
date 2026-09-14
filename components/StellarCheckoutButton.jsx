@@ -1,23 +1,26 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { payWithStellar } from "../lib/stellar/checkout";
 import { connectWallet, currentAddress, WalletError } from "../lib/stellar/freighter";
+import { registerMerchantQuoteFromWallet } from "../lib/stellar/quote-client";
 
 /**
- * Pay the current cart total with USDC on Stellar (via Freighter).
+ * Register a merchant-authorized cart quote, then pay that exact pending quote
+ * with USDC via Freighter. `displayAmountUsd` is presentation-only; browser
+ * price/total data never enters the payment authority tuple.
  */
-const StellarCheckoutButton = ({ amountUsd, orderId, onSuccess, disabled = false }) => {
+const StellarCheckoutButton = ({
+  items,
+  displayAmountUsd,
+  onQuote,
+  onSuccess,
+  disabled = false,
+}) => {
   const [publicKey, setPublicKey] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
-
-  const generatedOrderId = useMemo(
-    () => `SS-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
-    []
-  );
-  const effectiveOrderId = orderId || generatedOrderId;
 
   useEffect(() => {
     let cancelled = false;
@@ -48,9 +51,15 @@ const StellarCheckoutButton = ({ amountUsd, orderId, onSuccess, disabled = false
     }
 
     try {
+      const quote = await registerMerchantQuoteFromWallet({
+        publicKey: key,
+        items,
+        onStatus: (msg) => setMessage(msg),
+      });
+      if (onQuote) onQuote(quote);
+
       const res = await payWithStellar({
-        amountUsd,
-        orderId: effectiveOrderId,
+        quote,
         publicKey: key,
         onStatus: (msg) => setMessage(msg),
       });
@@ -58,7 +67,7 @@ const StellarCheckoutButton = ({ amountUsd, orderId, onSuccess, disabled = false
       setMessage("");
       if (onSuccess) onSuccess(res);
     } catch (e) {
-      setError(e instanceof WalletError ? e.message : e.message || "Payment failed.");
+      setError(e instanceof WalletError ? e.message : e?.message || "Payment failed.");
     } finally {
       setBusy(false);
     }
@@ -69,7 +78,7 @@ const StellarCheckoutButton = ({ amountUsd, orderId, onSuccess, disabled = false
       <button
         type="button"
         onClick={handlePay}
-        disabled={disabled || busy || Boolean(result)}
+        disabled={disabled || busy || Boolean(result) || !Array.isArray(items) || items.length === 0}
         className={`w-full flex flex-col items-center justify-center gap-1 py-3 rounded transition-colors disabled:opacity-60 ${
           result ? "bg-green-600 text-white" : "bg-purple-600 hover:bg-purple-700 text-white"
         }`}
@@ -85,15 +94,18 @@ const StellarCheckoutButton = ({ amountUsd, orderId, onSuccess, disabled = false
           <>
             <span className="font-semibold">Payment confirmed ✓</span>
             <span className="text-xs text-white/80">
-              ${Number(result.amountUsd).toFixed(2)} USDC · order {effectiveOrderId}
+              ${Number(result.amountUsd).toFixed(2)} USDC · order {result.orderId}
             </span>
           </>
         ) : (
           <>
             <span className="font-semibold">
-              Pay with USDC{amountUsd ? ` · $${Number(amountUsd).toFixed(2)}` : ""}
+              Request quote & pay with USDC
+              {displayAmountUsd ? ` · ~$${Number(displayAmountUsd).toFixed(2)}` : ""}
             </span>
-            <span className="text-xs text-white/80">From your Stellar wallet (Freighter)</span>
+            <span className="text-xs text-white/80">
+              Merchant price is resolved before Freighter payment authorization
+            </span>
           </>
         )}
       </button>

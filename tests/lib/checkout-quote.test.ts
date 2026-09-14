@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import {
   QuoteValidationError,
+  buildMerchantOrderIdentity,
+  cartItemsToQuoteItems,
   catalogPriceToUsdcRaw,
   normalizeQuoteItems,
+  quoteItemsDigestHex,
   resolveCanonicalQuote,
 } from "../../lib/checkout-quote";
 
@@ -53,6 +56,47 @@ describe("merchant-authoritative quote resolution", () => {
         ])
       )
     ).toBe("DUPLICATE_PRODUCT");
+  });
+
+  it("collapses duplicate cart rows into one quantity without accepting cart prices", () => {
+    const items = cartItemsToQuoteItems([
+      { id: PRODUCT_A, price: 0.01, cartItemId: "a" },
+      { id: PRODUCT_B, price: 9000, cartItemId: "b" },
+      { id: PRODUCT_A, price: -50, cartItemId: "c" },
+    ]);
+    expect(items).toEqual([
+      { productId: PRODUCT_A, quantity: 2 },
+      { productId: PRODUCT_B, quantity: 1 },
+    ]);
+  });
+
+  it("commits order identity to product multiplicity independent of display order", async () => {
+    const oneAOneB = [
+      { productId: PRODUCT_A, quantity: 1 },
+      { productId: PRODUCT_B, quantity: 1 },
+    ];
+    const sameReordered = [
+      { productId: PRODUCT_B, quantity: 1 },
+      { productId: PRODUCT_A, quantity: 1 },
+    ];
+    const twoAOneB = [
+      { productId: PRODUCT_A, quantity: 2 },
+      { productId: PRODUCT_B, quantity: 1 },
+    ];
+
+    const digest = await quoteItemsDigestHex(oneAOneB);
+    expect(await quoteItemsDigestHex(sameReordered)).toBe(digest);
+    expect(await quoteItemsDigestHex(twoAOneB)).not.toBe(digest);
+
+    const identity = await buildMerchantOrderIdentity(oneAOneB, "nonce-test");
+    expect(identity.cartDigestHex).toBe(digest);
+    expect(identity.orderId).toBe(`MQ1:${digest}:nonce-test`);
+  });
+
+  it("makes a cheap-cart quote unusable as the identity for a different cart", async () => {
+    const cheap = [{ productId: PRODUCT_A, quantity: 1 }];
+    const expensive = [{ productId: PRODUCT_B, quantity: 1 }];
+    expect(await quoteItemsDigestHex(cheap)).not.toBe(await quoteItemsDigestHex(expensive));
   });
 
   it("rejects zero, fractional, negative, and unsafe quantities", () => {

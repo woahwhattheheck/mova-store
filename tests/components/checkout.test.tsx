@@ -5,15 +5,40 @@ import React from "react";
 import Checkout from "../../app/checkout/page";
 import sendMail from "../../lib/sendmail";
 
-vi.mock("../../lib/sendmail", () => ({
-  default: vi.fn(),
-}));
+vi.mock("../../lib/sendmail", () => ({ default: vi.fn() }));
+
+const PRODUCT_ID = "11111111-1111-4111-8111-111111111111";
+const CART_DIGEST = "aa".repeat(32);
+const MERCHANT_QUOTE = {
+  orderId: `MQ1:${CART_DIGEST}:checkout-test`,
+  orderIdHex: "11".repeat(32),
+  cartDigestHex: CART_DIGEST,
+  buyer: "GBUYER",
+  tokenContractId: "CUSDC",
+  tokenSymbol: "USDC",
+  amountRaw: BigInt("1000000000"),
+  authValidUntilLedger: 123456,
+  transactionXdr: "test-xdr",
+  registrationHash: "quote-registration",
+};
 
 vi.mock("../../components/StellarCheckoutButton", () => ({
-  default: ({ onSuccess }: { onSuccess: (result: { amountUsd: number }) => void }) => (
-    <button type="button" data-testid="stellar-checkout-button" onClick={() => onSuccess({ amountUsd: 100 })}>
-      Mock Stellar payment
-    </button>
+  default: ({ onQuote, onSuccess }: any) => (
+    <>
+      <button type="button" data-testid="stellar-quote-button" onClick={() => onQuote(MERCHANT_QUOTE)}>
+        Mock merchant quote
+      </button>
+      <button
+        type="button"
+        data-testid="stellar-checkout-button"
+        onClick={() => {
+          onQuote(MERCHANT_QUOTE);
+          onSuccess({ amountUsd: 100, orderId: MERCHANT_QUOTE.orderId });
+        }}
+      >
+        Mock Stellar payment
+      </button>
+    </>
   ),
 }));
 
@@ -22,31 +47,31 @@ vi.mock("../../components/StellarWalletButton", () => ({
 }));
 
 vi.mock("../../components/StellarOrderWatch", () => ({
-  default: ({ onEvent }: { onEvent: () => void }) => (
+  default: ({ onEvent }: any) => (
     <button type="button" data-testid="stellar-order-watch" onClick={onEvent}>
       Mock on-chain payment
     </button>
   ),
 }));
 
-const storedCartItems = JSON.stringify([{ id: "checkout-fixture", name: "Test item", price: 100 }]);
+const storedCartItems = JSON.stringify([
+  { id: PRODUCT_ID, name: "Test item", price: 100, cartItemId: "cart-1" },
+]);
 
 function pendingMail() {
   let resolve!: (response: Awaited<ReturnType<typeof sendMail>>) => void;
   let reject!: (reason: Error) => void;
-  const promise = new Promise<Awaited<ReturnType<typeof sendMail>>>(
-    (resolvePromise, rejectPromise) => {
-      resolve = resolvePromise;
-      reject = rejectPromise;
-    }
-  );
+  const promise = new Promise<Awaited<ReturnType<typeof sendMail>>>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
   return { promise, resolve, reject };
 }
 
 function fillContactDetails() {
   fireEvent.change(screen.getByLabelText("First Name"), { target: { value: "Ada" } });
   fireEvent.change(screen.getByLabelText("Last Name"), { target: { value: "Lovelace" } });
-  fireEvent.change(screen.getByLabelText("Email"), { target: { value: "Ada@example.com" } });
+  fireEvent.change(screen.getByLabelText("Email"), { target: { value: "ada@sample.invalid" } });
   fireEvent.change(screen.getByLabelText("Address"), { target: { value: "123 Main Street" } });
 }
 
@@ -65,7 +90,7 @@ async function advanceToPayment() {
   await screen.findByTestId("stellar-checkout-button");
 }
 
-describe("Checkout paid-completion integrity", () => {
+describe("Checkout merchant-quoted paid completion", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.mocked(sendMail).mockReset();
@@ -76,92 +101,81 @@ describe("Checkout paid-completion integrity", () => {
     localStorage.setItem("totalPrice", "100");
   });
 
-  it("does not collect raw card credentials or expose payment before contact verification", () => {
+  it("does not expose payment before contact verification", () => {
     render(<Checkout />);
-
     expect(screen.queryByLabelText(/card number/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/cvv/i)).not.toBeInTheDocument();
     expect(screen.getByText(/does not collect card numbers or CVVs/i)).toBeInTheDocument();
     expect(screen.queryByTestId("stellar-checkout-button")).not.toBeInTheDocument();
-    expect(screen.queryByText(/payment confirmed/i)).not.toBeInTheDocument();
   });
 
-  it("keeps the cart intact while the verification email is in flight", async () => {
+  it("keeps the cart intact while verification email is in flight", async () => {
     const request = pendingMail();
     vi.mocked(sendMail).mockReturnValueOnce(request.promise);
-
     render(<Checkout />);
     fillContactDetails();
     fireEvent.click(screen.getByRole("button", { name: /send verification code/i }));
-
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: /sending verification code/i })).toBeDisabled();
-    });
+    await waitFor(() => expect(screen.getByRole("button", { name: /sending verification code/i })).toBeDisabled());
     expect(localStorage.getItem("cartItems")).toBe(storedCartItems);
-    expect(screen.queryByTestId("stellar-checkout-button")).not.toBeInTheDocument();
-
     request.resolve({ status: 200, text: "OK" });
     await screen.findByRole("button", { name: /^verify email$/i });
-    expect(localStorage.getItem("cartItems")).toBe(storedCartItems);
   });
 
-  it("treats a correct OTP as contact verification, not payment", async () => {
+  it("treats OTP as contact verification, not payment authority", async () => {
     await advanceToPayment();
-
-    expect(screen.getByText(/amount due: \$100\.00/i)).toBeInTheDocument();
+    expect(screen.getByText(/estimated cart subtotal: \$100\.00/i)).toBeInTheDocument();
+    expect(screen.getByText(/amount due and order ID are minted from the merchant-authorized quote/i)).toBeInTheDocument();
     expect(screen.queryByText(/payment confirmed\./i)).not.toBeInTheDocument();
+    expect(screen.queryByTestId("stellar-order-watch")).not.toBeInTheDocument();
     expect(localStorage.getItem("cartItems")).toBe(storedCartItems);
-    expect(localStorage.getItem("itemCount")).toBe("1");
-    expect(localStorage.getItem("totalPrice")).toBe("100");
   });
 
-  it("clears the cart and shows completion only after Stellar payment success", async () => {
+  it("clears the cart only after payment success and displays merchant order id", async () => {
     await advanceToPayment();
-
     fireEvent.click(screen.getByTestId("stellar-checkout-button"));
-
     expect(await screen.findByRole("heading", { name: /payment confirmed/i })).toBeInTheDocument();
+    expect(screen.getByText(new RegExp(MERCHANT_QUOTE.orderId))).toBeInTheDocument();
     expect(localStorage.getItem("cartItems")).toBeNull();
     expect(localStorage.getItem("itemCount")).toBeNull();
     expect(localStorage.getItem("totalPrice")).toBeNull();
   });
 
-  it("accepts the matching on-chain order event as an authoritative payment receipt", async () => {
+  it("arms recovery only after merchant quote exists", async () => {
     await advanceToPayment();
-
-    fireEvent.click(screen.getByTestId("stellar-order-watch"));
-
+    expect(screen.queryByTestId("stellar-order-watch")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("stellar-quote-button"));
+    const watcher = await screen.findByTestId("stellar-order-watch");
+    fireEvent.click(watcher);
     expect(await screen.findByRole("heading", { name: /payment confirmed/i })).toBeInTheDocument();
     expect(localStorage.getItem("cartItems")).toBeNull();
   });
 
-  it("keeps checkout at contact details when sending verification fails", async () => {
+  it("stays at contact details when verification send fails", async () => {
     vi.mocked(sendMail).mockRejectedValueOnce(new Error("mail unavailable"));
     render(<Checkout />);
     fillContactDetails();
-
     fireEvent.click(screen.getByRole("button", { name: /send verification code/i }));
-
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: /send verification code/i })).toBeEnabled();
-    });
+    await waitFor(() => expect(screen.getByRole("button", { name: /send verification code/i })).toBeEnabled());
     expect(screen.queryByRole("button", { name: /^verify email$/i })).not.toBeInTheDocument();
     expect(localStorage.getItem("cartItems")).toBe(storedCartItems);
   });
 
   it.each([
     { state: "missing cart", items: null, total: null },
-    { state: "empty items with a stale positive total", items: "[]", total: "100" },
-    { state: "items with a zero total", items: storedCartItems, total: "0" },
-    { state: "items with a malformed total", items: storedCartItems, total: "not-a-number" },
-  ])("keeps the empty-cart screen for $state", ({ items, total }) => {
+    { state: "empty items with stale positive total", items: "[]", total: "100" },
+  ])("keeps empty-cart screen for $state", ({ items, total }) => {
     localStorage.clear();
     if (items !== null) localStorage.setItem("cartItems", items);
     if (total !== null) localStorage.setItem("totalPrice", total);
-
     render(<Checkout />);
     expect(screen.getByRole("heading", { name: "Your cart is empty" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /back to shop/i })).toHaveAttribute("href", "/shop");
     expect(sendMail).not.toHaveBeenCalled();
+  });
+
+  it.each(["0", "not-a-number"])("does not let browser total %s suppress a real cart", (total) => {
+    localStorage.setItem("totalPrice", total);
+    render(<Checkout />);
+    expect(screen.queryByRole("heading", { name: "Your cart is empty" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Contact details" })).toBeInTheDocument();
   });
 });

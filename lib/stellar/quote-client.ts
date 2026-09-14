@@ -1,6 +1,6 @@
 import { rpc, TransactionBuilder } from "@stellar/stellar-sdk";
 
-import type { QuoteRequestItem } from "../checkout-quote";
+import { quoteItemsDigestHex, type QuoteRequestItem } from "../checkout-quote";
 import {
   NETWORK_PASSPHRASE,
   RPC_URL,
@@ -8,10 +8,12 @@ import {
 } from "./config";
 import { waitForTransaction } from "./events";
 import { ensureNetwork, signWithFreighter, WalletError } from "./freighter";
+import { bytesToHex, hashOrderId } from "./scval";
 
 export interface PreparedQuotePayload {
   orderId: string;
   orderIdHex: string;
+  cartDigestHex: string;
   buyer: string;
   tokenContractId: string;
   tokenSymbol: string;
@@ -36,11 +38,12 @@ const DECIMAL_UINT_RE = /^[1-9]\d*$/;
 /**
  * Treat the same-origin quote endpoint as a typed boundary, not as trusted JS.
  * The browser never derives or substitutes an amount if any returned identity
- * field is malformed or disagrees with the requested buyer/default token.
+ * field is malformed or disagrees with the requested buyer/default token/cart.
  */
 export function parsePreparedQuoteResponse(
   payload: unknown,
-  expectedBuyer: string
+  expectedBuyer: string,
+  expectedCartDigestHex: string
 ): PreparedQuotePayload {
   if (!payload || typeof payload !== "object") {
     throw new WalletError("Merchant quote response was malformed.", "QUOTE_RESPONSE_INVALID");
@@ -54,6 +57,8 @@ export function parsePreparedQuoteResponse(
 
   const orderId = typeof quote.orderId === "string" ? quote.orderId : "";
   const orderIdHex = typeof quote.orderIdHex === "string" ? quote.orderIdHex : "";
+  const cartDigestHex =
+    typeof quote.cartDigestHex === "string" ? quote.cartDigestHex.toLowerCase() : "";
   const buyer = typeof quote.buyer === "string" ? quote.buyer : "";
   const tokenContractId =
     typeof quote.tokenContractId === "string" ? quote.tokenContractId : "";
@@ -63,7 +68,19 @@ export function parsePreparedQuoteResponse(
     typeof quote.transactionXdr === "string" ? quote.transactionXdr : "";
   const authValidUntilLedger = quote.authValidUntilLedger;
 
-  if (!orderId || orderId.length > 128 || !HEX_32_RE.test(orderIdHex)) {
+  const normalizedExpectedDigest = expectedCartDigestHex.toLowerCase();
+  if (!HEX_32_RE.test(cartDigestHex) || cartDigestHex !== normalizedExpectedDigest) {
+    throw new WalletError(
+      "Merchant quote was bound to a different cart.",
+      "QUOTE_CART_MISMATCH"
+    );
+  }
+  if (
+    !orderId ||
+    orderId.length > 128 ||
+    !orderId.startsWith(`MQ1:${cartDigestHex}:`) ||
+    !HEX_32_RE.test(orderIdHex)
+  ) {
     throw new WalletError("Merchant quote identity was invalid.", "QUOTE_RESPONSE_INVALID");
   }
   if (buyer !== expectedBuyer) {
@@ -111,6 +128,7 @@ export function parsePreparedQuoteResponse(
   return {
     orderId,
     orderIdHex: orderIdHex.toLowerCase(),
+    cartDigestHex,
     buyer,
     tokenContractId,
     tokenSymbol,
@@ -134,6 +152,7 @@ export async function registerMerchantQuoteFromWallet(options: {
   const { publicKey, items, onStatus = () => undefined } = options;
 
   await ensureNetwork();
+  const expectedCartDigestHex = await quoteItemsDigestHex(items);
   onStatus("Requesting merchant-authorized quote…");
 
   const response = await fetch("/api/checkout/quote", {
@@ -160,7 +179,15 @@ export async function registerMerchantQuoteFromWallet(options: {
     throw new WalletError(message, code);
   }
 
-  const quote = parsePreparedQuoteResponse(payload, publicKey);
+  const quote = parsePreparedQuoteResponse(payload, publicKey, expectedCartDigestHex);
+  const actualOrderIdHex = bytesToHex(await hashOrderId(quote.orderId)).toLowerCase();
+  if (actualOrderIdHex !== quote.orderIdHex) {
+    throw new WalletError(
+      "Merchant quote order hash did not match its order identity.",
+      "QUOTE_ORDER_MISMATCH"
+    );
+  }
+
   onStatus("Authorizing merchant quote registration…");
   const signedXdr = await signWithFreighter(quote.transactionXdr, publicKey);
   const signed = TransactionBuilder.fromXDR(signedXdr, NETWORK_PASSPHRASE);

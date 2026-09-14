@@ -7,14 +7,15 @@ import { bytesToHex, hashOrderId } from "../lib/stellar/scval";
  * Live on-chain order monitor.
  *
  * Starts a `getEvents`-based indexer for the checkout contract and watches for
- * the exact `pay` event matching order id, token and raw amount. An order-id
- * collision or partial/wrong-token payment is never sufficient to complete a
- * checkout; the watcher keeps listening for the exact receipt.
+ * the exact `pay` event matching buyer, order id, token and raw amount. An
+ * order-id collision or another buyer's payment is never sufficient to complete
+ * this checkout; the watcher keeps listening for the exact receipt.
  *
  * @param {{
  *   orderId: string,
  *   expectedAmountRaw: string,
  *   expectedTokenContractId: string,
+ *   expectedBuyer: string,
  *   enabled?: boolean,
  *   onEvent?: ((event: import("../lib/stellar/indexer").IndexedEvent) => void) | null
  * }} props
@@ -23,6 +24,7 @@ const StellarOrderWatch = ({
   orderId,
   expectedAmountRaw,
   expectedTokenContractId,
+  expectedBuyer,
   enabled = true,
   onEvent = null,
 }) => {
@@ -42,8 +44,8 @@ const StellarOrderWatch = ({
       return undefined;
     }
 
-    if (expectedAmount <= 0n || !expectedTokenContractId) {
-      setError("Payment monitor is missing an exact token or amount expectation.");
+    if (expectedAmount <= 0n || !expectedTokenContractId || !expectedBuyer) {
+      setError("Payment monitor is missing an exact buyer, token, or amount expectation.");
       return undefined;
     }
 
@@ -74,6 +76,11 @@ const StellarOrderWatch = ({
           const orderHex = (event.fields.topic4 || "").toLowerCase();
           if (orderHex !== expectedOrder) return;
 
+          if (event.fields.topic2 !== expectedBuyer) {
+            setError("Ignored a payment for this order because the buyer did not match this wallet.");
+            return;
+          }
+
           if (event.fields.topic1 !== expectedTokenContractId) {
             setError("Ignored a payment for this order because the token did not match USDC.");
             return;
@@ -88,7 +95,7 @@ const StellarOrderWatch = ({
           }
 
           if (actualAmount !== expectedAmount) {
-            setError("Ignored a payment for this order because the amount did not match the cart total.");
+            setError("Ignored a payment for this order because the amount did not match the merchant quote.");
             return;
           }
 
@@ -108,7 +115,13 @@ const StellarOrderWatch = ({
       indexerRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, orderId, expectedAmountRaw, expectedTokenContractId]);
+  }, [
+    enabled,
+    orderId,
+    expectedAmountRaw,
+    expectedTokenContractId,
+    expectedBuyer,
+  ]);
 
   return (
     <div className="w-full text-xs bg-white/70 border border-purple-600/30 rounded-md p-3">
@@ -140,7 +153,7 @@ const StellarOrderWatch = ({
           {connected ? (
             <>
               <span className="w-3 h-3 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />
-              Listening for the exact USDC payment for order {orderId}…
+              Listening for the exact quoted USDC payment for order {orderId}…
             </>
           ) : (
             "Starting…"
