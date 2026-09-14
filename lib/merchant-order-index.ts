@@ -57,6 +57,7 @@ const HEX_64 = /^[0-9a-f]{64}$/;
 const STELLAR_ADDRESS = /^[A-Z2-7]{56}$/;
 const TOKEN_SYMBOL = /^[A-Z0-9][A-Z0-9._-]{0,15}$/;
 const UNSIGNED_INTEGER = /^(?:0|[1-9][0-9]*)$/;
+const I128_MAX = (1n << 127n) - 1n;
 const ORDER_ID_RE = /^MQ1:([0-9a-f]{64}):([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i;
 
 function boundedString(value: unknown, field: string, max: number): string {
@@ -91,8 +92,9 @@ export function normalizeMerchantOrderSeed(input: MerchantOrderSeed): MerchantOr
   const tokenSymbol = boundedString(input.tokenSymbol, "tokenSymbol", 16).toUpperCase();
   if (!TOKEN_SYMBOL.test(tokenSymbol)) throw new Error("tokenSymbol is invalid");
   const amountRaw = boundedString(input.amountRaw, "amountRaw", 40);
-  if (!UNSIGNED_INTEGER.test(amountRaw) || BigInt(amountRaw) <= 0n) {
-    throw new Error("amountRaw must be a positive unsigned integer string");
+  const amount = UNSIGNED_INTEGER.test(amountRaw) ? BigInt(amountRaw) : 0n;
+  if (!UNSIGNED_INTEGER.test(amountRaw) || amount <= 0n || amount > I128_MAX) {
+    throw new Error("amountRaw must be a positive Soroban i128 integer string");
   }
   if (!Number.isSafeInteger(input.authValidUntilLedger) || input.authValidUntilLedger < 0) {
     throw new Error("authValidUntilLedger must be a non-negative safe integer");
