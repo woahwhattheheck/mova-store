@@ -3,9 +3,11 @@ import { beforeEach, describe, expect, vi } from "vitest";
 import React from "react";
 
 import Checkout from "../../app/checkout/page";
+import { saveCheckoutPaidOrder } from "../../lib/checkout-paid-order";
 import sendMail from "../../lib/sendmail";
 
 vi.mock("../../lib/sendmail", () => ({ default: vi.fn() }));
+vi.mock("../../lib/checkout-paid-order", () => ({ saveCheckoutPaidOrder: vi.fn() }));
 
 const PRODUCT_ID = "11111111-1111-4111-8111-111111111111";
 const CART_DIGEST = "aa".repeat(32);
@@ -33,7 +35,12 @@ vi.mock("../../components/StellarCheckoutButton", () => ({
         data-testid="stellar-checkout-button"
         onClick={() => {
           onQuote(MERCHANT_QUOTE);
-          onSuccess({ amountUsd: 100, orderId: MERCHANT_QUOTE.orderId });
+          onSuccess({
+            amountUsd: 100,
+            orderId: MERCHANT_QUOTE.orderId,
+            hash: "direct-payment-tx",
+            receipt: { ledger: 456789 },
+          });
         }}
       >
         Mock Stellar payment
@@ -48,7 +55,11 @@ vi.mock("../../components/StellarWalletButton", () => ({
 
 vi.mock("../../components/StellarOrderWatch", () => ({
   default: ({ onEvent }: any) => (
-    <button type="button" data-testid="stellar-order-watch" onClick={onEvent}>
+    <button
+      type="button"
+      data-testid="stellar-order-watch"
+      onClick={() => onEvent({ txHash: "observed-payment-tx", ledger: 456790 })}
+    >
       Mock on-chain payment
     </button>
   ),
@@ -94,6 +105,8 @@ describe("Checkout merchant-quoted paid completion", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.mocked(sendMail).mockReset();
+    vi.mocked(saveCheckoutPaidOrder).mockReset();
+    vi.mocked(saveCheckoutPaidOrder).mockResolvedValue({} as any);
     vi.spyOn(Math, "random").mockReturnValue(0.000042);
     localStorage.clear();
     localStorage.setItem("cartItems", storedCartItems);
@@ -130,9 +143,25 @@ describe("Checkout merchant-quoted paid completion", () => {
     expect(localStorage.getItem("cartItems")).toBe(storedCartItems);
   });
 
-  it("clears the cart only after payment success and displays merchant order id", async () => {
+  it("persists receipt + fulfillment before clearing the paid cart", async () => {
     await advanceToPayment();
     fireEvent.click(screen.getByTestId("stellar-checkout-button"));
+
+    await waitFor(() => expect(saveCheckoutPaidOrder).toHaveBeenCalledWith(expect.objectContaining({
+      orderId: MERCHANT_QUOTE.orderId,
+      total: 100,
+      tokenSymbol: "USDC",
+      tokenAmount: 100,
+      txHash: "direct-payment-tx",
+      ledger: 456789,
+      fulfillment: {
+        firstName: "Ada",
+        lastName: "Lovelace",
+        email: "ada@sample.invalid",
+        address: "123 Main Street",
+      },
+    })));
+
     expect(await screen.findByRole("heading", { name: /payment confirmed/i })).toBeInTheDocument();
     expect(screen.getByText(new RegExp(MERCHANT_QUOTE.orderId))).toBeInTheDocument();
     expect(localStorage.getItem("cartItems")).toBeNull();
@@ -140,12 +169,39 @@ describe("Checkout merchant-quoted paid completion", () => {
     expect(localStorage.getItem("totalPrice")).toBeNull();
   });
 
-  it("arms recovery only after merchant quote exists", async () => {
+  it("keeps the cart and locks payment controls when merchant persistence fails, then retries persistence only", async () => {
+    vi.mocked(saveCheckoutPaidOrder)
+      .mockRejectedValueOnce(new Error("merchant database unavailable"))
+      .mockResolvedValueOnce({} as any);
+
+    await advanceToPayment();
+    fireEvent.click(screen.getByTestId("stellar-checkout-button"));
+
+    const retry = await screen.findByRole("button", { name: /retry saving paid order/i });
+    expect(localStorage.getItem("cartItems")).toBe(storedCartItems);
+    expect(screen.queryByTestId("stellar-checkout-button")).not.toBeInTheDocument();
+    expect(screen.getByText(/do not submit another payment/i)).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /payment confirmed/i })).not.toBeInTheDocument();
+
+    fireEvent.click(retry);
+    expect(await screen.findByRole("heading", { name: /payment confirmed/i })).toBeInTheDocument();
+    expect(saveCheckoutPaidOrder).toHaveBeenCalledTimes(2);
+    expect(localStorage.getItem("cartItems")).toBeNull();
+  });
+
+  it("arms recovery only after merchant quote exists and persists the observed receipt before teardown", async () => {
     await advanceToPayment();
     expect(screen.queryByTestId("stellar-order-watch")).not.toBeInTheDocument();
     fireEvent.click(screen.getByTestId("stellar-quote-button"));
     const watcher = await screen.findByTestId("stellar-order-watch");
     fireEvent.click(watcher);
+
+    await waitFor(() => expect(saveCheckoutPaidOrder).toHaveBeenCalledWith(expect.objectContaining({
+      orderId: MERCHANT_QUOTE.orderId,
+      total: 100,
+      txHash: "observed-payment-tx",
+      ledger: 456790,
+    })));
     expect(await screen.findByRole("heading", { name: /payment confirmed/i })).toBeInTheDocument();
     expect(localStorage.getItem("cartItems")).toBeNull();
   });
