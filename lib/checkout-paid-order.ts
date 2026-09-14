@@ -50,6 +50,7 @@ function canonicalTxHash(value: unknown): string | null {
 }
 
 function canonicalLedger(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
   const ledger = typeof value === "number" ? value : Number(value);
   return Number.isSafeInteger(ledger) && ledger >= 0 ? ledger : null;
 }
@@ -61,8 +62,6 @@ function paidCommerceFingerprint(order: Pick<
   | "paymentMethod"
   | "tokenSymbol"
   | "tokenAmount"
-  | "txHash"
-  | "ledger"
   | "items"
   | "fulfillment"
 >): string {
@@ -72,11 +71,28 @@ function paidCommerceFingerprint(order: Pick<
     paymentMethod: order.paymentMethod,
     tokenSymbol: order.tokenSymbol ?? null,
     tokenAmount: order.tokenAmount == null ? null : Number(order.tokenAmount),
-    txHash: canonicalTxHash(order.txHash),
-    ledger: canonicalLedger(order.ledger),
     items: order.items.map(canonicalItem),
     fulfillment: canonicalFulfillment(order.fulfillment),
   });
+}
+
+function paymentIdentityMatches(candidate: BuyerOrder, remote: BuyerOrder): boolean {
+  const candidateHash = canonicalTxHash(candidate.txHash);
+  const remoteHash = canonicalTxHash(remote.txHash);
+  const candidateLedger = canonicalLedger(candidate.ledger);
+  const remoteLedger = canonicalLedger(remote.ledger);
+
+  // An ambiguous insert cannot be reconciled from commerce fields alone. At
+  // least one authority-derived Stellar receipt coordinate must be available.
+  if (candidateHash === null && candidateLedger === null) return false;
+
+  // Bind every payment coordinate supplied by the confirmed callback. A legacy
+  // row that is missing one of those coordinates is not exact enough to clear
+  // a paid cart after an insert failure.
+  if (candidateHash !== null && remoteHash !== candidateHash) return false;
+  if (candidateLedger !== null && remoteLedger !== candidateLedger) return false;
+
+  return true;
 }
 
 function parseRemoteItems(value: unknown): {
@@ -241,7 +257,10 @@ export async function saveCheckoutPaidOrder(
   if (!remoteExisting) {
     throw new Error("Could not persist paid order details to merchant fulfillment");
   }
-  if (paidCommerceFingerprint(remoteExisting) !== paidCommerceFingerprint(signedCandidate)) {
+  if (
+    paidCommerceFingerprint(remoteExisting) !== paidCommerceFingerprint(signedCandidate) ||
+    !paymentIdentityMatches(signedCandidate, remoteExisting)
+  ) {
     throw new Error("Paid order id already has conflicting merchant commerce evidence");
   }
 
