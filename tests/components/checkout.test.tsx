@@ -68,6 +68,7 @@ async function advanceToPayment() {
 describe("Checkout paid-completion integrity", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.mocked(sendMail).mockReset();
     vi.spyOn(Math, "random").mockReturnValue(0.000042);
     localStorage.clear();
     localStorage.setItem("cartItems", storedCartItems);

@@ -10,6 +10,14 @@ import { bytesToHex, hashOrderId } from "../lib/stellar/scval";
  * the exact `pay` event matching order id, token and raw amount. An order-id
  * collision or partial/wrong-token payment is never sufficient to complete a
  * checkout; the watcher keeps listening for the exact receipt.
+ *
+ * @param {{
+ *   orderId: string,
+ *   expectedAmountRaw: string,
+ *   expectedTokenContractId: string,
+ *   enabled?: boolean,
+ *   onEvent?: ((event: import("../lib/stellar/indexer").IndexedEvent) => void) | null
+ * }} props
  */
 const StellarOrderWatch = ({
   orderId,
