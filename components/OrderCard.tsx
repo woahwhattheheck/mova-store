@@ -8,6 +8,7 @@ import { BuyerOrder, verifyOrderOnChain } from "../lib/buyer-orders";
 import { NETWORK } from "../lib/stellar/config";
 import FulfillmentTrackingPanel from "./FulfillmentTrackingPanel";
 import ReturnReviewPanel from "./ReturnReviewPanel";
+import WarrantyReviewPanel from "./WarrantyReviewPanel";
 
 interface OrderCardProps {
   order: BuyerOrder;
@@ -190,6 +191,10 @@ export default function OrderCard({ order }: OrderCardProps) {
 
       {(order.status === "Shipped" || order.status === "Completed") && (
         <ReturnReviewPanel order={order} />
+      )}
+
+      {(order.status === "Shipped" || order.status === "Completed") && (
+        <WarrantyReviewPanel order={order} />
       )}
     </div>
   );
