@@ -40,7 +40,10 @@ const baseInput = {
   fulfillment,
 };
 
-type RemoteInput = typeof baseInput & { txHash?: string; ledger?: number };
+type RemoteInput = Omit<typeof baseInput, "txHash" | "ledger"> & {
+  txHash?: string;
+  ledger?: number;
+};
 
 function signedInSession() {
   return {
@@ -128,6 +131,20 @@ describe("checkout paid-order durability boundary", () => {
     expect(mocks.insert).toHaveBeenCalledTimes(2);
   });
 
+  it("does not let a legacy local cache without receipt metadata block an exact merchant write", async () => {
+    const { txHash: _txHash, ledger: _ledger, ...legacy } = createPaidBuyerOrderSnapshot(baseInput);
+    localStorage.setItem("mova_buyer_orders", JSON.stringify([
+      { ...legacy, userId: "user-123", userEmail: "ada@example.com" },
+    ]));
+
+    await expect(saveCheckoutPaidOrder(baseInput)).resolves.toMatchObject({
+      orderId: baseInput.orderId,
+      txHash: baseInput.txHash,
+      ledger: baseInput.ledger,
+    });
+    expect(mocks.insert).toHaveBeenCalledTimes(1);
+  });
+
   it("persists transaction hash and ledger evidence for duplicate reconciliation", async () => {
     await saveCheckoutPaidOrder(baseInput);
 
@@ -203,6 +220,22 @@ describe("checkout paid-order durability boundary", () => {
     );
   });
 
+  it("fails closed when confirmed ledger evidence is missing from the remote row", async () => {
+    const remote = exactRemoteRow();
+    mocks.insert.mockResolvedValueOnce({
+      data: null,
+      error: { message: "duplicate key value violates unique constraint" },
+    });
+    mocks.maybeSingle.mockResolvedValueOnce({
+      data: { ...remote, items: { ...remote.items, ledger: null } },
+      error: null,
+    });
+
+    await expect(saveCheckoutPaidOrder(baseInput)).rejects.toThrow(
+      /conflicting merchant commerce evidence/i
+    );
+  });
+
   it("uses matching ledger evidence as the explicit fallback for a hashless confirmation", async () => {
     const hashlessInput: RemoteInput = {
       ...baseInput,
@@ -244,6 +277,27 @@ describe("checkout paid-order durability boundary", () => {
     });
 
     await expect(saveCheckoutPaidOrder(hashlessInput)).rejects.toThrow(
+      /conflicting merchant commerce evidence/i
+    );
+  });
+
+  it("fails closed on duplicate resolution when the callback has no payment identity", async () => {
+    const identitylessInput: RemoteInput = {
+      ...baseInput,
+      orderId: "SS-NO-IDENTITY-1",
+      txHash: undefined,
+      ledger: undefined,
+    };
+    mocks.insert.mockResolvedValueOnce({
+      data: null,
+      error: { message: "duplicate key value violates unique constraint" },
+    });
+    mocks.maybeSingle.mockResolvedValueOnce({
+      data: exactRemoteRow(identitylessInput),
+      error: null,
+    });
+
+    await expect(saveCheckoutPaidOrder(identitylessInput)).rejects.toThrow(
       /conflicting merchant commerce evidence/i
     );
   });
