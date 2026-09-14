@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 
 import {
   QuoteValidationError,
+  buildMerchantOrderIdentity,
   normalizeQuoteItems,
   resolveCanonicalQuote,
 } from "../../../../lib/checkout-quote";
@@ -103,7 +104,7 @@ export async function POST(request: Request) {
     }
 
     const quote = resolveCanonicalQuote(items, data ?? []);
-    const orderId = crypto.randomUUID();
+    const { cartDigestHex, orderId } = await buildMerchantOrderIdentity(quote.items);
     const prepared = await prepareMerchantQuote({
       buyer,
       orderId,
@@ -116,6 +117,7 @@ export async function POST(request: Request) {
       quote: {
         orderId,
         orderIdHex: prepared.orderIdHex,
+        cartDigestHex,
         buyer,
         tokenContractId: token.contractId,
         tokenSymbol: token.symbol,
