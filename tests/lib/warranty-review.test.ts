@@ -9,6 +9,7 @@ import {
 
 const SHA_A = "a".repeat(64);
 const SHA_B = "b".repeat(64);
+const SHA_C = "c".repeat(64);
 
 function input(): CompileWarrantyReviewInput {
   return {
@@ -197,6 +198,53 @@ describe("WarrantyCare review packets", () => {
     const digest = input();
     digest.request.evidence![0].sourceSha256 = "ABC";
     await expect(compileWarrantyReview(digest)).rejects.toBeInstanceOf(WarrantyReviewValidationError);
+  });
+
+  it("rejects unknown runtime keys at every authority boundary", async () => {
+    const mutations: Array<(source: Record<string, any>) => void> = [
+      (source) => { source.extra = "ignored-before-hardening"; },
+      (source) => { source.order.extra = "ignored-before-hardening"; },
+      (source) => { source.order.items[0].extra = "ignored-before-hardening"; },
+      (source) => { source.request.extra = "ignored-before-hardening"; },
+      (source) => { source.request.selections[0].extra = "ignored-before-hardening"; },
+      (source) => { source.request.evidence[0].extra = "ignored-before-hardening"; },
+      (source) => { source.verification.extra = "ignored-before-hardening"; },
+    ];
+
+    for (const mutate of mutations) {
+      const source = input() as unknown as Record<string, any>;
+      mutate(source);
+      await expect(
+        compileWarrantyReview(source as unknown as CompileWarrantyReviewInput)
+      ).rejects.toBeInstanceOf(WarrantyReviewValidationError);
+    }
+  });
+
+  it("binds superseded evidence revisions into claim and packet identity", async () => {
+    const source = input();
+    source.request.evidence!.push({
+      ...source.request.evidence![0],
+      revision: 2,
+      capturedAt: "2026-09-13T19:56:00.000Z",
+      sourceRef: "buyer-photo-2",
+      sourceSha256: SHA_B,
+    });
+    const original = await compileWarrantyReview(source);
+    expect(original.receipt.decision).toBe("READY_FOR_MERCHANT_WARRANTY_REVIEW");
+    expect(original.request.evidence).toHaveLength(1);
+    expect(original.request.evidence[0].revision).toBe(2);
+
+    const drifted = structuredClone(source);
+    drifted.request.evidence![0].sourceSha256 = SHA_C;
+    const changed = await compileWarrantyReview(drifted);
+
+    expect(changed.request.evidence).toEqual(original.request.evidence);
+    expect(changed.request.evidenceHistoryDigest).not.toBe(original.request.evidenceHistoryDigest);
+    expect(changed.receipt.evidenceDigest).not.toBe(original.receipt.evidenceDigest);
+    expect(changed.receipt.requestDigest).not.toBe(original.receipt.requestDigest);
+    expect(changed.receipt.claimId).not.toBe(original.receipt.claimId);
+    expect(changed.receipt.packetDigest).not.toBe(original.receipt.packetDigest);
+    expect(await verifyWarrantyReviewPacket(original, drifted)).toBe(false);
   });
 
   it("detects packet/source tamper semantically", async () => {
