@@ -10,21 +10,17 @@ vi.mock("../../lib/stellar/scval", () => ({
 
 let mockIndexerInstance: any = null;
 
-vi.mock("../../lib/stellar/indexer", () => {
-  return {
-    PaymentEventIndexer: vi.fn().mockImplementation(function () {
-      mockIndexerInstance = {
-        start: vi.fn(),
-        stop: vi.fn(),
-      };
-      return mockIndexerInstance;
-    }),
-  };
-});
+vi.mock("../../lib/stellar/indexer", () => ({
+  PaymentEventIndexer: vi.fn().mockImplementation(function () {
+    mockIndexerInstance = { start: vi.fn(), stop: vi.fn() };
+    return mockIndexerInstance;
+  }),
+}));
 
 const paymentExpectation = {
   expectedAmountRaw: "10000000",
   expectedTokenContractId: "USDC",
+  expectedBuyer: "GBUYER",
 };
 
 describe("StellarOrderWatch", () => {
@@ -34,8 +30,6 @@ describe("StellarOrderWatch", () => {
   });
 
   it("clears the error banner when onStatus receives lastError=undefined while running", async () => {
-    let capturedCallbacks: any = null;
-
     const { unmount } = render(
       <StellarOrderWatch orderId="test-order-123" enabled={true} {...paymentExpectation} />
     );
@@ -46,46 +40,25 @@ describe("StellarOrderWatch", () => {
 
     expect(mockIndexerInstance).not.toBeNull();
     expect(mockIndexerInstance.start).toHaveBeenCalled();
-    capturedCallbacks = mockIndexerInstance.start.mock.calls[0][0];
+    const capturedCallbacks = mockIndexerInstance.start.mock.calls[0][0];
 
-    act(() => {
-      capturedCallbacks.onStatus({
-        running: true,
-        lastError: "Transient network timeout",
-      });
-    });
-
+    act(() => capturedCallbacks.onStatus({ running: true, lastError: "Transient network timeout" }));
     expect(screen.getByText("Transient network timeout")).toBeInTheDocument();
 
-    act(() => {
-      capturedCallbacks.onStatus({
-        running: true,
-        lastError: undefined,
-      });
-    });
-
+    act(() => capturedCallbacks.onStatus({ running: true, lastError: undefined }));
     expect(screen.queryByText("Transient network timeout")).not.toBeInTheDocument();
-
     unmount();
   });
 
-  it("clears error banner when an exact matching payment event is received", async () => {
-    let capturedCallbacks: any = null;
-
-    render(
-      <StellarOrderWatch orderId="test-order-123" enabled={true} {...paymentExpectation} />
-    );
+  it("clears error banner when exact buyer-bound matching payment event is received", async () => {
+    render(<StellarOrderWatch orderId="test-order-123" enabled={true} {...paymentExpectation} />);
 
     await act(async () => {
       await Promise.resolve();
     });
 
-    capturedCallbacks = mockIndexerInstance.start.mock.calls[0][0];
-
-    act(() => {
-      capturedCallbacks.onError(new Error("RPC hiccup"));
-    });
-
+    const capturedCallbacks = mockIndexerInstance.start.mock.calls[0][0];
+    act(() => capturedCallbacks.onError(new Error("RPC hiccup")));
     expect(screen.getByText("RPC hiccup")).toBeInTheDocument();
 
     act(() => {
@@ -95,6 +68,7 @@ describe("StellarOrderWatch", () => {
         txHash: "tx123",
         fields: {
           topic4: "01020304",
+          topic2: paymentExpectation.expectedBuyer,
           amount: paymentExpectation.expectedAmountRaw,
           topic1: paymentExpectation.expectedTokenContractId,
         },
@@ -103,5 +77,39 @@ describe("StellarOrderWatch", () => {
 
     expect(screen.queryByText("RPC hiccup")).not.toBeInTheDocument();
     expect(screen.getByText("Payment detected on-chain ✓")).toBeInTheDocument();
+  });
+
+  it("does not accept another buyer's otherwise exact payment", async () => {
+    const onEvent = vi.fn();
+    render(
+      <StellarOrderWatch
+        orderId="test-order-123"
+        enabled={true}
+        onEvent={onEvent}
+        {...paymentExpectation}
+      />
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const capturedCallbacks = mockIndexerInstance.start.mock.calls[0][0];
+    act(() => {
+      capturedCallbacks.onEvent({
+        symbol: "pay",
+        ledger: 100,
+        txHash: "tx123",
+        fields: {
+          topic4: "01020304",
+          topic2: "GOTHER",
+          amount: paymentExpectation.expectedAmountRaw,
+          topic1: paymentExpectation.expectedTokenContractId,
+        },
+      });
+    });
+
+    expect(onEvent).not.toHaveBeenCalled();
+    expect(screen.getByText(/buyer did not match this wallet/i)).toBeInTheDocument();
   });
 });
