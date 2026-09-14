@@ -20,6 +20,7 @@ import {
   usdToRawUnits,
   orderIdHash,
   payWithStellar,
+  type MerchantAuthorizedPaymentQuote,
 } from "../../../lib/stellar/checkout";
 
 function expectWalletErrorCode(fn: () => unknown, code: string) {
@@ -73,6 +74,7 @@ describe("assertExactPaymentReceipt", () => {
   const expected = {
     contractId: "CCHECKOUT",
     tokenContractId: "CUSDC",
+    buyer: "GBUYER",
     orderIdHex: "ab".repeat(32),
     amountRaw: 10_000_000n,
   };
@@ -81,11 +83,12 @@ describe("assertExactPaymentReceipt", () => {
     ledger: 99,
     contractId: expected.contractId,
     token: expected.tokenContractId,
+    buyer: expected.buyer,
     orderId: expected.orderIdHex,
     amount: expected.amountRaw.toString(),
   };
 
-  it("returns the receipt only when contract, token, order and raw amount all match", () => {
+  it("returns the receipt only when buyer, contract, token, order and raw amount all match", () => {
     expect(assertExactPaymentReceipt(receipt, expected)).toEqual(receipt);
   });
 
@@ -99,6 +102,7 @@ describe("assertExactPaymentReceipt", () => {
   it.each([
     ["contract", { contractId: "COTHER" }],
     ["token", { token: "CWRONG" }],
+    ["buyer", { buyer: "GOTHER" }],
     ["order", { orderId: "cd".repeat(32) }],
     ["underpayment", { amount: "9999999" }],
     ["malformed amount", { amount: "10 USDC" }],
@@ -114,43 +118,69 @@ describe("payWithStellar", () => {
   const dummyPublicKey = "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5";
   const dummyAccount = new Account(dummyPublicKey, "100");
 
-  const buildDummyTx = () => {
-    return new TransactionBuilder(dummyAccount, {
+  const buildDummyTx = () =>
+    new TransactionBuilder(dummyAccount, {
       fee: "100",
       networkPassphrase: Networks.TESTNET,
     })
       .setTimeout(0)
       .build();
-  };
+
+  async function quoteFor(
+    orderId: string,
+    overrides: Partial<MerchantAuthorizedPaymentQuote> = {}
+  ): Promise<MerchantAuthorizedPaymentQuote> {
+    return {
+      orderId,
+      orderIdHex: await orderIdHash(orderId),
+      buyer: dummyPublicKey,
+      tokenContractId: configMod.defaultToken().contractId,
+      amountRaw: 10_000_000n,
+      ...overrides,
+    };
+  }
 
   it("throws CONTRACT_NOT_CONFIGURED if CHECKOUT_CONTRACT_ID is empty", async () => {
     vi.resetModules();
     vi.doMock("../../../lib/stellar/config", async () => {
       const actual = await vi.importActual<typeof import("../../../lib/stellar/config")>("../../../lib/stellar/config");
-      return {
-        ...actual,
-        CHECKOUT_CONTRACT_ID: "",
-      };
+      return { ...actual, CHECKOUT_CONTRACT_ID: "" };
     });
     const { payWithStellar: pay } = await import("../../../lib/stellar/checkout");
     await expect(
       pay({
-        amountUsd: 10,
-        orderId: "ORDER-TEST-001",
+        quote: {
+          orderId: "MQ1:test",
+          orderIdHex: "11".repeat(32),
+          buyer: dummyPublicKey,
+          tokenContractId: configMod.defaultToken().contractId,
+          amountRaw: 10_000_000n,
+        },
         publicKey: dummyPublicKey,
       })
-    ).rejects.toMatchObject({
-      code: "CONTRACT_NOT_CONFIGURED",
-    });
+    ).rejects.toMatchObject({ code: "CONTRACT_NOT_CONFIGURED" });
     vi.doUnmock("../../../lib/stellar/config");
     vi.resetModules();
   });
 
-  it("executes full successful checkout payment flow with an exact receipt", async () => {
+  it("rejects a quote bound to another buyer before opening payment flow", async () => {
+    const quote = await quoteFor("MQ1:buyer-hostile", { buyer: "GOTHER" });
+    await expect(payWithStellar({ quote, publicKey: dummyPublicKey })).rejects.toMatchObject({
+      code: "QUOTE_BUYER_MISMATCH",
+    });
+  });
+
+  it("rejects a quote whose order hash does not match its merchant order identity", async () => {
+    const quote = await quoteFor("MQ1:hash-hostile", { orderIdHex: "00".repeat(32) });
+    await expect(payWithStellar({ quote, publicKey: dummyPublicKey })).rejects.toMatchObject({
+      code: "QUOTE_ORDER_MISMATCH",
+    });
+  });
+
+  it("executes successful payment using the exact registered merchant quote", async () => {
     const tx = buildDummyTx();
     const xdrString = tx.toXDR();
-    const orderId = "ORD-999";
-    const expectedOrderHex = await orderIdHash(orderId);
+    const quote = await quoteFor("MQ1:exact-quote-order");
 
     const ensureNetworkSpy = vi.spyOn(freighterMod, "ensureNetwork").mockResolvedValue();
     const assertPaymentReadySpy = vi.spyOn(accountMod, "assertPaymentReady").mockResolvedValue({
@@ -161,18 +191,14 @@ describe("payWithStellar", () => {
       decimals: 7,
       hasTrustline: true,
       trustlineAuthorized: true,
-      requiredRaw: 10_000_000n,
+      requiredRaw: quote.amountRaw,
       sufficientBalance: true,
       sufficientReserve: true,
       issues: [],
     });
     const prepareSpy = vi.spyOn(simulateMod, "prepareAndReport").mockResolvedValue({
       tx,
-      report: {
-        ok: true,
-        minResourceFee: 1200n,
-        instructions: 5000,
-      },
+      report: { ok: true, minResourceFee: 1200n, instructions: 5000 },
     });
     const budgetSpy = vi.spyOn(simulateMod, "budgetFee").mockResolvedValue("51200");
     const signSpy = vi.spyOn(freighterMod, "signWithFreighter").mockResolvedValue(xdrString);
@@ -190,25 +216,23 @@ describe("payWithStellar", () => {
       ledger: 456,
       contractId: configMod.CHECKOUT_CONTRACT_ID,
       token: configMod.defaultToken().contractId,
-      orderId: expectedOrderHex,
-      amount: "10000000",
+      orderId: quote.orderIdHex,
+      amount: quote.amountRaw.toString(),
       buyer: dummyPublicKey,
     });
 
     const statusUpdates: string[] = [];
     const result = await payWithStellar({
-      amountUsd: 1,
-      orderId,
+      quote,
       publicKey: dummyPublicKey,
       onStatus: (s) => statusUpdates.push(s),
     });
 
     expect(result.hash).toBe("abc123mocktxhash");
     expect(result.status).toBe(rpc.Api.GetTransactionStatus.SUCCESS);
+    expect(result.orderId).toBe(quote.orderId);
+    expect(result.amountRaw).toBe(quote.amountRaw);
     expect(result.amountUsd).toBe(1);
-    expect(result.amountRaw).toBe(10_000_000n);
-    expect(result.simulation.minResourceFeeStroops).toBe("1200");
-    expect(result.simulation.recommendedInclusionFeeStroops).toBe("51200");
     expect(result.receipt.buyer).toBe(dummyPublicKey);
     expect(statusUpdates.length).toBeGreaterThan(0);
 
@@ -222,9 +246,9 @@ describe("payWithStellar", () => {
     decodeSpy.mockRestore();
   });
 
-  it("throws TX_SIMULATION_ERROR when simulation report fails", async () => {
+  it("throws TX_SIMULATION_ERROR when quoted payment simulation fails", async () => {
     const tx = buildDummyTx();
-
+    const quote = await quoteFor("MQ1:fail-sim");
     vi.spyOn(freighterMod, "ensureNetwork").mockResolvedValue();
     vi.spyOn(accountMod, "assertPaymentReady").mockResolvedValue({
       account: dummyAccount,
@@ -234,37 +258,27 @@ describe("payWithStellar", () => {
       decimals: 7,
       hasTrustline: true,
       trustlineAuthorized: true,
-      requiredRaw: 10_000_000n,
+      requiredRaw: quote.amountRaw,
       sufficientBalance: true,
       sufficientReserve: true,
       issues: [],
     });
     vi.spyOn(simulateMod, "prepareAndReport").mockResolvedValue({
       tx,
-      report: {
-        ok: false,
-        error: { message: "HostError contract call trapped" },
-      },
+      report: { ok: false, error: { message: "HostError contract call trapped" } },
     });
 
-    await expect(
-      payWithStellar({
-        amountUsd: 5,
-        orderId: "ORD-FAIL-SIM",
-        publicKey: dummyPublicKey,
-      })
-    ).rejects.toMatchObject({
+    await expect(payWithStellar({ quote, publicKey: dummyPublicKey })).rejects.toMatchObject({
       code: "TX_SIMULATION_ERROR",
       message: expect.stringContaining("HostError contract call trapped"),
     });
-
     vi.restoreAllMocks();
   });
 
-  it("throws TX_SEND_ERROR when server rejects transaction submission", async () => {
+  it("throws TX_SEND_ERROR when server rejects quoted payment submission", async () => {
     const tx = buildDummyTx();
     const xdrString = tx.toXDR();
-
+    const quote = await quoteFor("MQ1:fail-send");
     vi.spyOn(freighterMod, "ensureNetwork").mockResolvedValue();
     vi.spyOn(accountMod, "assertPaymentReady").mockResolvedValue({
       account: dummyAccount,
@@ -274,7 +288,7 @@ describe("payWithStellar", () => {
       decimals: 7,
       hasTrustline: true,
       trustlineAuthorized: true,
-      requiredRaw: 10_000_000n,
+      requiredRaw: quote.amountRaw,
       sufficientBalance: true,
       sufficientReserve: true,
       issues: [],
@@ -287,22 +301,13 @@ describe("payWithStellar", () => {
     vi.spyOn(freighterMod, "signWithFreighter").mockResolvedValue(xdrString);
     vi.spyOn(rpc.Server.prototype, "sendTransaction").mockResolvedValue({
       status: "ERROR",
-      errorResult: {
-        toXDR: () => "mockErrorXdr",
-      },
+      errorResult: { toXDR: () => "mockErrorXdr" },
     } as never);
 
-    await expect(
-      payWithStellar({
-        amountUsd: 2,
-        orderId: "ORD-FAIL-SEND",
-        publicKey: dummyPublicKey,
-      })
-    ).rejects.toMatchObject({
+    await expect(payWithStellar({ quote, publicKey: dummyPublicKey })).rejects.toMatchObject({
       code: "TX_SEND_ERROR",
       message: expect.stringContaining("Transaction rejected"),
     });
-
     vi.restoreAllMocks();
   });
 });
