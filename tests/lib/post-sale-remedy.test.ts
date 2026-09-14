@@ -125,7 +125,10 @@ describe("post-sale remedy disposition", () => {
   it.each([
     ["APPROVE_REPLACEMENT_REVIEW_HANDOFF", "REPLACEMENT"],
     ["APPROVE_EXCHANGE_REVIEW_HANDOFF", "EXCHANGE"],
-  ] as const)("supports return %s without external authority", async (action, remedy) => {
+  ] as const)("supports return %s without external authority", async (
+    action: "APPROVE_REPLACEMENT_REVIEW_HANDOFF" | "APPROVE_EXCHANGE_REVIEW_HANDOFF",
+    remedy: "REPLACEMENT" | "EXCHANGE"
+  ) => {
     const input = await validReturnCompileInput();
     input.decisions = [decision(input.source.packet.receipt.packetDigest, action, "POLICY_ELIGIBLE")];
     const packet = await compilePostSaleRemedy(input);
@@ -170,7 +173,11 @@ describe("post-sale remedy disposition", () => {
     ["DENY_REMEDY", "POLICY_INELIGIBLE", "REMEDY_DENIED"],
     ["REQUEST_MORE_EVIDENCE", "EVIDENCE_INSUFFICIENT", "MORE_EVIDENCE_REQUIRED"],
     ["HOLD", "OWNER_HOLD", "OWNER_HOLD"],
-  ] as const)("maps %s to %s without a handoff", async (action, reason, state) => {
+  ] as const)("maps %s to %s without a handoff", async (
+    action: "DENY_REMEDY" | "REQUEST_MORE_EVIDENCE" | "HOLD",
+    reason: "POLICY_INELIGIBLE" | "EVIDENCE_INSUFFICIENT" | "OWNER_HOLD",
+    state: "REMEDY_DENIED" | "MORE_EVIDENCE_REQUIRED" | "OWNER_HOLD"
+  ) => {
     const input = await validReturnCompileInput();
     input.decisions = [decision(input.source.packet.receipt.packetDigest, action, reason)];
     const packet = await compilePostSaleRemedy(input);
@@ -256,7 +263,7 @@ describe("post-sale remedy disposition", () => {
     "../merchant-review",
     "folder/review",
     "sk_live_abcdefghijklmnop",
-  ])("rejects unsafe decision evidence reference %s", async (evidenceRef) => {
+  ])("rejects unsafe decision evidence reference %s", async (evidenceRef: string) => {
     const input = await validReturnCompileInput();
     input.decisions[0].evidenceRef = evidenceRef;
     await expect(compilePostSaleRemedy(input)).rejects.toThrow();
