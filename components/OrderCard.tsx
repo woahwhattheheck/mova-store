@@ -1,13 +1,12 @@
 "use client";
 
 import React, { useState } from "react";
-import Image from "next/image";
-import Link from "next/link";
 import { SiStellar } from "react-icons/si";
-import { FaCreditCard, FaExternalLinkAlt, FaCheckCircle, FaCopy, FaCheck } from "react-icons/fa";
+import { FaCreditCard, FaExternalLinkAlt, FaCopy, FaCheck } from "react-icons/fa";
 import { MdLocalShipping, MdPayment, MdPending, MdCancel } from "react-icons/md";
 import { BuyerOrder, verifyOrderOnChain } from "../lib/buyer-orders";
 import { NETWORK } from "../lib/stellar/config";
+import FulfillmentTrackingPanel from "./FulfillmentTrackingPanel";
 import ReturnReviewPanel from "./ReturnReviewPanel";
 
 interface OrderCardProps {
@@ -80,7 +79,6 @@ export default function OrderCard({ order }: OrderCardProps) {
 
   return (
     <div className="bg-white rounded-xl border border-purple-100 shadow-sm hover:shadow-md transition-shadow overflow-hidden">
-      {/* Card Header */}
       <div className="bg-purple-50/60 p-4 sm:p-5 border-b border-purple-100 flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-2">
@@ -110,7 +108,6 @@ export default function OrderCard({ order }: OrderCardProps) {
         </div>
       </div>
 
-      {/* Items Section */}
       <div className="p-4 sm:p-5 divide-y divide-gray-100">
         {order.items && order.items.length > 0 ? (
           order.items.map((item, idx) => (
@@ -143,7 +140,6 @@ export default function OrderCard({ order }: OrderCardProps) {
         )}
       </div>
 
-      {/* Payment Details Footer */}
       <div className="bg-gray-50/70 p-4 sm:p-5 border-t border-gray-100 flex flex-wrap items-center justify-between gap-3 text-xs">
         <div className="flex items-center gap-2">
           {order.paymentMethod === "stellar" ? (
@@ -187,6 +183,10 @@ export default function OrderCard({ order }: OrderCardProps) {
           )}
         </div>
       </div>
+
+      {(order.status === "Shipped" || order.status === "Completed") && (
+        <FulfillmentTrackingPanel orderId={order.orderId} />
+      )}
 
       {(order.status === "Shipped" || order.status === "Completed") && (
         <ReturnReviewPanel order={order} />
