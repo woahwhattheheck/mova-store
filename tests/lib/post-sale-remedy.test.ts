@@ -289,6 +289,22 @@ describe("post-sale remedy disposition", () => {
     await expect(compilePostSaleRemedy(boolAlias)).rejects.toThrow();
   });
 
+  it("rejects unbound unknown keys in the exact upstream source input", async () => {
+    const input = await validReturnCompileInput();
+    (input.source.input.request as unknown as Record<string, unknown>).ignoredAuthority = true;
+    await expect(compilePostSaleRemedy(input)).rejects.toThrow(/unknown key/);
+  });
+
+  it("enforces whole-second precision for merchant decision and trusted evaluation time", async () => {
+    const fractionalDecision = await validReturnCompileInput();
+    fractionalDecision.decisions[0].decidedAt = "2026-09-13T21:03:00.123Z";
+    await expect(compilePostSaleRemedy(fractionalDecision)).rejects.toThrow(/whole-second/);
+
+    const fractionalEvaluation = await validReturnCompileInput();
+    fractionalEvaluation.evaluatedAt = "2026-09-13T21:04:00.123Z";
+    await expect(compilePostSaleRemedy(fractionalEvaluation)).rejects.toThrow(/whole-second/);
+  });
+
   it("keeps a source HOLD as source-not-review-ready instead of promoting it", async () => {
     const sourceInput = returnSourceInput();
     sourceInput.order.status = "Paid";
