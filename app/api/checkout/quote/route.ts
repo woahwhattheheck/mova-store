@@ -7,6 +7,8 @@ import {
   normalizeQuoteItems,
   resolveCanonicalQuote,
 } from "../../../../lib/checkout-quote";
+import { MERCHANT_ORDER_INDEX_SCHEMA } from "../../../../lib/merchant-order-index";
+import { persistMerchantQuoteIndex } from "../../../../lib/server/merchant-order-index-store";
 import { defaultToken } from "../../../../lib/stellar/config";
 import {
   MerchantQuoteError,
@@ -19,9 +21,7 @@ export const dynamic = "force-dynamic";
 function json(body: unknown, status = 200) {
   return NextResponse.json(body, {
     status,
-    headers: {
-      "Cache-Control": "no-store, max-age=0",
-    },
+    headers: { "Cache-Control": "no-store, max-age=0" },
   });
 }
 
@@ -30,7 +30,6 @@ function quoteError(error: unknown) {
     const status = error.code === "PRODUCT_NOT_FOUND" ? 409 : 400;
     return json({ error: error.message, code: error.code }, status);
   }
-
   if (error instanceof MerchantQuoteError) {
     const status =
       error.code === "CATALOG_NOT_SYNCHRONIZED" || error.code === "QUOTE_AMOUNT_MISMATCH"
@@ -46,15 +45,14 @@ function quoteError(error: unknown) {
           : "Merchant quote service is temporarily unavailable.";
     return json({ error: publicMessage, code: error.code }, status);
   }
-
+  console.error("Merchant quote/index failure", error);
   return json({ error: "Merchant quote service is temporarily unavailable." }, 503);
 }
 
 /**
- * Resolve a browser cart against canonical Supabase product rows and return a
- * Soroban transaction carrying only the merchant quote signer's bounded auth
- * entry. The buyer wallet remains the transaction source/fee payer and must
- * sign + submit the XDR before the pending quote exists on-chain.
+ * The quote is persisted to the durable merchant index before its signed XDR is
+ * released. If indexing fails, checkout fails closed: there is no browser-visible
+ * merchant authorization that the merchant queue could later forget.
  */
 export async function POST(request: Request) {
   try {
@@ -64,22 +62,13 @@ export async function POST(request: Request) {
     } catch {
       return json({ error: "Request body must be valid JSON." }, 400);
     }
-
-    if (!body || typeof body !== "object") {
-      return json({ error: "Invalid quote request." }, 400);
-    }
+    if (!body || typeof body !== "object") return json({ error: "Invalid quote request." }, 400);
 
     const record = body as Record<string, unknown>;
     const buyer = typeof record.buyer === "string" ? record.buyer.trim() : "";
-    if (!buyer) {
-      return json({ error: "A Stellar buyer account is required." }, 400);
-    }
+    if (!buyer) return json({ error: "A Stellar buyer account is required." }, 400);
 
-    // `normalizeQuoteItems` intentionally reads only productId + quantity.
-    // Hostile browser `price`, `unitPrice`, `total`, and `amountRaw` fields are
-    // ignored and never cross the merchant-authority boundary.
     const items = normalizeQuoteItems(record.items);
-
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
     if (!supabaseUrl || !supabaseAnonKey) {
@@ -87,21 +76,11 @@ export async function POST(request: Request) {
     }
 
     const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-        detectSessionInUrl: false,
-      },
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
     });
-
     const ids = items.map((item) => item.productId);
-    const { data, error } = await supabase
-      .from("products")
-      .select("id,price")
-      .in("id", ids);
-    if (error) {
-      return json({ error: "Catalog service is temporarily unavailable." }, 503);
-    }
+    const { data, error } = await supabase.from("products").select("id,price").in("id", ids);
+    if (error) return json({ error: "Catalog service is temporarily unavailable." }, 503);
 
     const quote = resolveCanonicalQuote(items, data ?? []);
     const { cartDigestHex, orderId } = await buildMerchantOrderIdentity(quote.items);
@@ -112,6 +91,17 @@ export async function POST(request: Request) {
       amountRaw: quote.amountRaw,
     });
     const token = defaultToken();
+
+    await persistMerchantQuoteIndex({
+      schemaVersion: MERCHANT_ORDER_INDEX_SCHEMA,
+      orderId,
+      cartDigestSha256: cartDigestHex,
+      buyer,
+      tokenContractId: token.contractId,
+      tokenSymbol: token.symbol,
+      amountRaw: prepared.amountRaw.toString(),
+      authValidUntilLedger: prepared.authValidUntilLedger,
+    });
 
     return json({
       quote: {
