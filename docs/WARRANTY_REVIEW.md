@@ -26,7 +26,9 @@ That means only that the structured claim packet is internally coherent and, for
 
 The UI never uploads or stores a photo/video/diagnostic and never accepts a URL, email address, phone number, credential, or raw file contents as an evidence reference. An optional reference is an opaque label plus the SHA-256 of evidence already stored under a separate owner-controlled process.
 
-The core supports bounded revision histories. Exact replay collapses. Changed bytes under the same evidence identity/revision, kind changes across one evidence lineage, or capture-time rollback produce `EVIDENCE_REVISION_CONFLICT` and force `HOLD`.
+The core supports bounded revision histories. Exact replay collapses. Changed bytes under the same evidence identity/revision, kind changes across one evidence lineage, or capture-time rollback produce `EVIDENCE_REVISION_CONFLICT` and force `HOLD`. The canonical request also binds a SHA-256 of the **entire deduplicated revision history**, not only the latest evidence row, so mutating a superseded revision changes claim/receipt identity and invalidates semantic verification even when the latest revision is unchanged.
+
+Every runtime object boundary uses an exact key set. Unknown top-level, order, line, request, selection, evidence, or verification fields are rejected rather than silently ignored, preventing unbound caller semantics from riding alongside an otherwise valid receipt.
 
 ## Fail-closed behavior
 
