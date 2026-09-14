@@ -1,0 +1,35 @@
+name: WarrantyCare CI
+
+on:
+  pull_request:
+    paths:
+      - "lib/warranty-review.ts"
+      - "components/WarrantyReviewPanel.tsx"
+      - "components/OrderCard.tsx"
+      - "tests/lib/warranty-review.test.ts"
+      - "docs/WARRANTY_REVIEW.md"
+      - ".github/workflows/warranty-review.yml"
+  push:
+    branches: [main]
+    paths:
+      - "lib/warranty-review.ts"
+      - "components/WarrantyReviewPanel.tsx"
+      - "components/OrderCard.tsx"
+      - "tests/lib/warranty-review.test.ts"
+      - "docs/WARRANTY_REVIEW.md"
+      - ".github/workflows/warranty-review.yml"
+
+jobs:
+  proof:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: WarrantyCare hostile tests
+        run: npx vitest run tests/lib/warranty-review.test.ts
+      - name: Type check
+        run: npm run type-check
