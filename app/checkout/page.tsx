@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import Link from "next/link";
 import { AiOutlineLoading3Quarters } from "react-icons/ai";
 import { MdArrowBack } from "react-icons/md";
@@ -11,9 +11,9 @@ import StellarOrderWatch from "../../components/StellarOrderWatch";
 import StellarWalletButton from "../../components/StellarWalletButton";
 import Toast from "../../components/Toast";
 import useToast from "../../hooks/useToast";
+import { cartItemsToQuoteItems } from "../../lib/checkout-quote";
 import sendMail from "../../lib/sendmail";
-import { usdToRawUnits } from "../../lib/stellar/checkout";
-import { defaultToken } from "../../lib/stellar/config";
+import type { RegisteredQuote } from "../../lib/stellar/quote-client";
 import { validateAddress, validateEmail, validateName, validateOTP } from "../../lib/validation";
 
 const Checkout = () => {
@@ -28,6 +28,8 @@ const Checkout = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [enteredOtp, setEnteredOtp] = useState("");
   const [paymentComplete, setPaymentComplete] = useState(false);
+  const [registeredQuote, setRegisteredQuote] = useState<RegisteredQuote | null>(null);
+  const [paidOrderId, setPaidOrderId] = useState("");
   const { toast, showToast, hideToast } = useToast(5000);
   const [formData, setFormData] = useState({
     firstName: "",
@@ -37,9 +39,13 @@ const Checkout = () => {
     subject: "MOVA STORE CHECKOUT VERIFICATION",
   });
 
-  const [orderId] = useState(() => `SS-${Date.now()}-${Math.floor(Math.random() * 1e6)}`);
-  const expectedAmountRaw = totalPrice > 0 ? usdToRawUnits(totalPrice).toString() : "";
-  const expectedTokenContractId = defaultToken().contractId;
+  const quoteItems = useMemo(() => {
+    try {
+      return cartItemsToQuoteItems(cartItems);
+    } catch {
+      return [];
+    }
+  }, [cartItems]);
 
   const clearPaidCart = () => {
     localStorage.removeItem("cartItems");
@@ -47,21 +53,27 @@ const Checkout = () => {
     localStorage.removeItem("totalPrice");
   };
 
-  const completePaidOrder = (message: string) => {
+  const completePaidOrder = (orderId: string, message: string) => {
     if (paymentComplete) return;
     clearPaidCart();
+    setPaidOrderId(orderId);
     setPaymentComplete(true);
     showToast(message);
   };
 
-  const handleStellarSuccess = (result: { amountUsd: number | string }) => {
+  const handleStellarSuccess = (result: { amountUsd: number | string; orderId: string }) => {
     completePaidOrder(
-      `USDC payment received ✓ $${Number(result.amountUsd).toFixed(2)} · order ${orderId}`
+      result.orderId,
+      `USDC payment received ✓ $${Number(result.amountUsd).toFixed(2)} · order ${result.orderId}`
     );
   };
 
   const handleObservedPayment = () => {
-    completePaidOrder(`USDC payment detected on-chain ✓ · order ${orderId}`);
+    if (!registeredQuote) return;
+    completePaidOrder(
+      registeredQuote.orderId,
+      `USDC payment detected on-chain ✓ · order ${registeredQuote.orderId}`
+    );
   };
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -149,7 +161,10 @@ const Checkout = () => {
     }
   }, []);
 
-  const isEmptyCart = isLoaded && !paymentComplete && (cartItems.length === 0 || totalPrice <= 0);
+  // Browser totals are presentation-only. A stale/zero/tampered total must not
+  // turn a real cart into an empty one or become payment authority; the merchant
+  // quote endpoint independently resolves canonical product prices.
+  const isEmptyCart = isLoaded && !paymentComplete && cartItems.length === 0;
 
   if (isEmptyCart) {
     return (
@@ -197,7 +212,7 @@ const Checkout = () => {
               <h2 className="text-2xl font-bold text-purple-950">Verified checkout, real payment</h2>
               <p className="mt-3 text-purple-950 max-w-md">
                 Email verification confirms where we can reach you. It never counts as payment.
-                Your order completes only after the matching Stellar USDC payment is confirmed.
+                Your order completes only after the matching merchant-quoted Stellar USDC payment is confirmed.
               </p>
             </div>
             <div className="bg-white/80 border border-purple-700/30 rounded-md p-4 max-w-md text-sm text-gray-700">
@@ -270,20 +285,38 @@ const Checkout = () => {
               <div className="bg-white p-4 rounded shadow-md flex flex-col gap-4">
                 <div className="text-center">
                   <h2 className="text-2xl font-semibold">Pay with Stellar USDC</h2>
-                  <p className="text-gray-600 mt-1">Amount due: ${totalPrice.toFixed(2)}</p>
-                  <p className="text-xs text-gray-500 mt-1">Order {orderId}</p>
+                  <p className="text-gray-600 mt-1">
+                    Estimated cart subtotal: {totalPrice > 0 ? `$${totalPrice.toFixed(2)}` : "pending merchant quote"}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    The amount due and order ID are minted from the merchant-authorized quote, not browser storage.
+                  </p>
                 </div>
                 <StellarWalletButton />
-                <StellarCheckoutButton amountUsd={totalPrice} orderId={orderId} onSuccess={handleStellarSuccess} />
-                <StellarOrderWatch
-                  orderId={orderId}
-                  expectedAmountRaw={expectedAmountRaw}
-                  expectedTokenContractId={expectedTokenContractId}
-                  enabled
-                  onEvent={handleObservedPayment}
+                <StellarCheckoutButton
+                  items={quoteItems}
+                  displayAmountUsd={totalPrice > 0 ? totalPrice : undefined}
+                  onQuote={setRegisteredQuote}
+                  onSuccess={handleStellarSuccess}
+                  disabled={quoteItems.length === 0}
                 />
+                {quoteItems.length === 0 && (
+                  <p className="text-xs text-red-700 text-center" role="alert">
+                    This cart cannot be merchant-quoted. Return to the shop and re-add the products before paying.
+                  </p>
+                )}
+                {registeredQuote && (
+                  <StellarOrderWatch
+                    orderId={registeredQuote.orderId}
+                    expectedAmountRaw={registeredQuote.amountRaw.toString()}
+                    expectedTokenContractId={registeredQuote.tokenContractId}
+                    expectedBuyer={registeredQuote.buyer}
+                    enabled
+                    onEvent={handleObservedPayment}
+                  />
+                )}
                 <p className="text-[11px] text-gray-500 text-center">
-                  The order stays open until this exact order ID, USDC token, and raw cart total are confirmed on-chain. Email verification alone never clears your cart.
+                  The order stays open until this exact merchant-created order ID, buyer, USDC token, and raw quoted amount are confirmed on-chain. Email verification alone never clears your cart.
                 </p>
                 <button type="button" onClick={handleGoBack} className="w-full flex justify-center items-center bg-gray-300 text-black py-2 rounded hover:bg-gray-400 transition-colors">
                   <MdArrowBack className="mr-2" /> Back to verification
@@ -295,7 +328,7 @@ const Checkout = () => {
               <div className="bg-white p-6 rounded shadow-md min-h-80 flex flex-col justify-center items-center">
                 <SiStellar size={56} className="text-green-600 mb-4" aria-hidden="true" />
                 <h2 className="text-4xl mb-4 text-center font-bold">Payment confirmed.</h2>
-                <p className="text-center">Your paid order {orderId} is complete.</p>
+                <p className="text-center">Your paid order {paidOrderId} is complete.</p>
                 <span className="text-center text-gray-600">Thanks for shopping with us.</span>
                 <Link href="/shop" className="text-center mt-8 py-2 bg-purple-700 text-white hover:bg-purple-600 rounded-md px-4">
                   Back to Shop
