@@ -74,6 +74,10 @@ describe("merchant order durable index", () => {
     expect(() => normalizeMerchantOrderSeed({ ...seed(), cartDigestSha256: "b".repeat(64) })).toThrow();
   });
 
+  it("rejects quote amounts above Soroban signed-i128", () => {
+    expect(() => normalizeMerchantOrderSeed({ ...seed(), amountRaw: (1n << 127n).toString() })).toThrow();
+  });
+
   it("formats bigint amounts without Number precision loss", () => {
     expect(merchantRowToDisplayAmount({ amountRaw: "123456789" })).toBe("12.34");
   });
