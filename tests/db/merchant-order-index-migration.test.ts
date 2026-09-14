@@ -12,7 +12,7 @@ describe("merchant order index migration", () => {
     expect(sql).toContain("alter table public.merchant_order_index enable row level security");
     expect(sql).toContain('create policy "Admins can read merchant order index"');
     expect(sql).toContain("using (public.is_admin())");
-    expect(sql).toContain("revoke insert, update, delete on public.merchant_order_index from authenticated");
+    expect(sql).toContain("revoke all on public.merchant_order_index from authenticated");
     expect(sql).toContain("grant select on public.merchant_order_index to authenticated");
   });
 
