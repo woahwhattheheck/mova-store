@@ -42,13 +42,11 @@ export interface ReturnRemedySource {
   packet: ReturnReviewPacket;
   input: CompileReturnReviewInput;
 }
-
 export interface WarrantyRemedySource {
   kind: "WARRANTY";
   packet: WarrantyReviewPacket;
   input: CompileWarrantyReviewInput;
 }
-
 export type RemedySource = ReturnRemedySource | WarrantyRemedySource;
 
 export interface MerchantRemedyDecision {
@@ -60,20 +58,17 @@ export interface MerchantRemedyDecision {
   evidenceSha256: string;
   sourcePacketDigest: string;
 }
-
 export interface CompilePostSaleRemedyInput {
   source: RemedySource;
   decisions: MerchantRemedyDecision[];
   evaluatedAt: string;
 }
-
 export interface RemedyLineBinding {
   lineIndex: number;
   id?: string | number;
   name: string;
   quantity: number;
 }
-
 export interface RemedyHandoff {
   schemaVersion: typeof POST_SALE_REMEDY_SCHEMA;
   handoffId: string;
@@ -100,7 +95,6 @@ export interface RemedyHandoff {
   buyerAcceptanceClaimed: false;
   cashOrRevenueClaimed: false;
 }
-
 export interface PostSaleRemedyReceipt {
   schemaVersion: typeof POST_SALE_REMEDY_SCHEMA;
   state: RemedyState;
@@ -125,7 +119,6 @@ export interface PostSaleRemedyReceipt {
   cashOrRevenueClaimed: false;
   packetDigest: string;
 }
-
 export interface PostSaleRemedyPacket {
   schemaVersion: typeof POST_SALE_REMEDY_SCHEMA;
   source: {
@@ -153,7 +146,7 @@ const OPAQUE_RE = /^[A-Za-z0-9][A-Za-z0-9._:+-]{0,127}$/;
 const PII_RE = /(?:[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}|\b(?:https?:\/\/|www\.)|\b(?:\+?1[-. ]?)?\(?\d{3}\)?[-. ]\d{3}[-. ]\d{4}\b)/i;
 const SECRET_RE = /(?:sk_(?:live|test)_[A-Za-z0-9]{8,}|pk_(?:live|test)_[A-Za-z0-9]{8,}|gh[pousr]_[A-Za-z0-9]{16,}|xox[baprs]-[A-Za-z0-9-]{10,}|api[_-]?key|bearer[:._-]?[A-Za-z0-9]{10,})/i;
 
-function assertPlainObject(value: unknown, field: string): asserts value is Record<string, unknown> {
+function object(value: unknown, field: string): asserts value is Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new PostSaleRemedyValidationError(`${field} must be an object`);
   }
@@ -163,13 +156,13 @@ function assertPlainObject(value: unknown, field: string): asserts value is Reco
   }
 }
 
-function assertKeys(
+function keys(
   value: unknown,
   field: string,
   required: readonly string[],
   optional: readonly string[] = []
 ): asserts value is Record<string, unknown> {
-  assertPlainObject(value, field);
+  object(value, field);
   const allowed = new Set([...required, ...optional]);
   for (const key of required) {
     if (!Object.prototype.hasOwnProperty.call(value, key)) {
@@ -177,45 +170,49 @@ function assertKeys(
     }
   }
   for (const key of Object.keys(value)) {
-    if (!allowed.has(key)) {
-      throw new PostSaleRemedyValidationError(`${field} contains unknown key ${key}`);
-    }
+    if (!allowed.has(key)) throw new PostSaleRemedyValidationError(`${field} contains unknown key ${key}`);
   }
 }
 
+function array(value: unknown, field: string): asserts value is unknown[] {
+  if (!Array.isArray(value)) throw new PostSaleRemedyValidationError(`${field} must be an array`);
+}
+
 function canonicalUtc(value: unknown, field: string): string {
-  if (typeof value !== "string") {
-    throw new PostSaleRemedyValidationError(`${field} must be a canonical UTC timestamp`);
-  }
+  if (typeof value !== "string") throw new PostSaleRemedyValidationError(`${field} must be canonical UTC`);
   const parsed = new Date(value);
   if (!Number.isFinite(parsed.getTime()) || parsed.toISOString() !== value) {
-    throw new PostSaleRemedyValidationError(`${field} must be a canonical UTC timestamp`);
+    throw new PostSaleRemedyValidationError(`${field} must be canonical UTC`);
   }
   return value;
 }
 
-function sha256Value(value: unknown, field: string): string {
+function wholeSecondUtc(value: unknown, field: string): string {
+  const canonical = canonicalUtc(value, field);
+  if (new Date(canonical).getUTCMilliseconds() !== 0) {
+    throw new PostSaleRemedyValidationError(`${field} must use whole-second UTC precision`);
+  }
+  return canonical;
+}
+
+function digest(value: unknown, field: string): string {
   if (typeof value !== "string" || !SHA256_RE.test(value)) {
     throw new PostSaleRemedyValidationError(`${field} must be lowercase SHA-256`);
   }
   return value;
 }
 
-function boundedSourceText(value: unknown, field: string, max: number): string {
-  if (typeof value !== "string") {
-    throw new PostSaleRemedyValidationError(`${field} must be text`);
-  }
+function sourceText(value: unknown, field: string, max: number): string {
+  if (typeof value !== "string") throw new PostSaleRemedyValidationError(`${field} must be text`);
   const normalized = value.trim();
-  if (normalized.length === 0 || normalized.length > max || /\p{C}/u.test(normalized)) {
+  if (!normalized || normalized.length > max || /\p{C}/u.test(normalized)) {
     throw new PostSaleRemedyValidationError(`${field} is invalid`);
   }
   return normalized;
 }
 
-function opaqueText(value: unknown, field: string): string {
-  if (typeof value !== "string") {
-    throw new PostSaleRemedyValidationError(`${field} must be an opaque identifier`);
-  }
+function opaque(value: unknown, field: string): string {
+  if (typeof value !== "string") throw new PostSaleRemedyValidationError(`${field} must be opaque`);
   const normalized = value.trim();
   if (
     !OPAQUE_RE.test(normalized) ||
@@ -230,30 +227,30 @@ function opaqueText(value: unknown, field: string): string {
   return normalized;
 }
 
-function stableProjection(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(stableProjection);
+function project(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(project);
   if (value && typeof value === "object") {
     return Object.fromEntries(
       Object.entries(value as Record<string, unknown>)
         .filter(([, entry]) => entry !== undefined)
         .sort(([a], [b]) => a.localeCompare(b))
-        .map(([key, entry]) => [key, stableProjection(entry)])
+        .map(([key, entry]) => [key, project(entry)])
     );
   }
   return value;
 }
 
 export function canonicalPostSaleRemedyJson(value: unknown): string {
-  return JSON.stringify(stableProjection(value));
+  return JSON.stringify(project(value));
 }
 
 export async function postSaleRemedySha256Hex(value: string): Promise<string> {
   const bytes = new TextEncoder().encode(value);
-  const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
-  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  const result = await globalThis.crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(result), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-function normalizeAction(value: unknown): RemedyAction {
+function action(value: unknown): RemedyAction {
   const allowed: RemedyAction[] = [
     "APPROVE_REFUND_REVIEW_HANDOFF",
     "APPROVE_REPLACEMENT_REVIEW_HANDOFF",
@@ -269,7 +266,7 @@ function normalizeAction(value: unknown): RemedyAction {
   return value as RemedyAction;
 }
 
-function normalizeReason(value: unknown): RemedyReasonCode {
+function reason(value: unknown): RemedyReasonCode {
   const allowed: RemedyReasonCode[] = [
     "EVIDENCE_SUFFICIENT",
     "EVIDENCE_INSUFFICIENT",
@@ -285,8 +282,8 @@ function normalizeReason(value: unknown): RemedyReasonCode {
   return value as RemedyReasonCode;
 }
 
-function normalizeDecision(input: MerchantRemedyDecision): MerchantRemedyDecision {
-  assertKeys(input, "decision", [
+function normalizeDecision(value: MerchantRemedyDecision): MerchantRemedyDecision {
+  keys(value, "decision", [
     "decisionId",
     "decidedAt",
     "action",
@@ -296,221 +293,221 @@ function normalizeDecision(input: MerchantRemedyDecision): MerchantRemedyDecisio
     "sourcePacketDigest",
   ]);
   return {
-    decisionId: opaqueText(input.decisionId, "decision.decisionId"),
-    decidedAt: canonicalUtc(input.decidedAt, "decision.decidedAt"),
-    action: normalizeAction(input.action),
-    reasonCode: normalizeReason(input.reasonCode),
-    evidenceRef: opaqueText(input.evidenceRef, "decision.evidenceRef"),
-    evidenceSha256: sha256Value(input.evidenceSha256, "decision.evidenceSha256"),
-    sourcePacketDigest: sha256Value(input.sourcePacketDigest, "decision.sourcePacketDigest"),
+    decisionId: opaque(value.decisionId, "decision.decisionId"),
+    decidedAt: wholeSecondUtc(value.decidedAt, "decision.decidedAt"),
+    action: action(value.action),
+    reasonCode: reason(value.reasonCode),
+    evidenceRef: opaque(value.evidenceRef, "decision.evidenceRef"),
+    evidenceSha256: digest(value.evidenceSha256, "decision.evidenceSha256"),
+    sourcePacketDigest: digest(value.sourcePacketDigest, "decision.sourcePacketDigest"),
   };
 }
 
-function normalizeDecisionSet(decisions: MerchantRemedyDecision[]) {
-  if (!Array.isArray(decisions) || decisions.length === 0 || decisions.length > 16) {
+function normalizeDecisions(values: MerchantRemedyDecision[]) {
+  if (!Array.isArray(values) || values.length < 1 || values.length > 16) {
     throw new PostSaleRemedyValidationError("decisions must contain 1-16 events");
   }
   const byId = new Map<string, MerchantRemedyDecision>();
-  let replayConflict = false;
-  for (let i = 0; i < decisions.length; i += 1) {
-    const normalized = normalizeDecision(decisions[i]);
+  let conflict = false;
+  for (const value of values) {
+    const normalized = normalizeDecision(value);
     const prior = byId.get(normalized.decisionId);
-    if (prior) {
-      if (canonicalPostSaleRemedyJson(prior) !== canonicalPostSaleRemedyJson(normalized)) {
-        replayConflict = true;
-      }
-      continue;
+    if (prior && canonicalPostSaleRemedyJson(prior) !== canonicalPostSaleRemedyJson(normalized)) {
+      conflict = true;
+    } else if (!prior) {
+      byId.set(normalized.decisionId, normalized);
     }
-    byId.set(normalized.decisionId, normalized);
   }
-  const unique = Array.from(byId.values()).sort((a, b) => a.decisionId.localeCompare(b.decisionId));
-  return { unique, replayConflict };
+  return { values: [...byId.values()].sort((a, b) => a.decisionId.localeCompare(b.decisionId)), conflict };
 }
 
-function normalizeLine(
-  line: Record<string, unknown>,
+function validateSourceInput(source: RemedySource): void {
+  const input = source.input as unknown;
+  keys(input, "source.input", ["order", "request", "verification", "evaluatedAt"]);
+
+  keys(input.order, "source.input.order", ["orderId", "paymentMethod", "status", "createdAt", "items"]);
+  array(input.order.items, "source.input.order.items");
+  input.order.items.forEach((item, index) => {
+    if (source.kind === "RETURN") {
+      keys(item, `source.input.order.items[${index}]`, ["name", "price"], ["id", "quantity"]);
+    } else {
+      keys(item, `source.input.order.items[${index}]`, ["name"], ["id", "quantity"]);
+    }
+  });
+
+  if (source.kind === "RETURN") {
+    keys(input.request, "source.input.request", ["requestedAt", "reason", "selections"], ["details"]);
+  } else {
+    keys(
+      input.request,
+      "source.input.request",
+      ["requestedAt", "firstObservedAt", "symptom", "selections"],
+      ["details", "evidence"]
+    );
+  }
+  array(input.request.selections, "source.input.request.selections");
+  input.request.selections.forEach((selection, index) => {
+    keys(selection, `source.input.request.selections[${index}]`, ["lineIndex", "quantity"]);
+  });
+
+  if (source.kind === "WARRANTY" && input.request.evidence !== undefined) {
+    array(input.request.evidence, "source.input.request.evidence");
+    input.request.evidence.forEach((entry, index) => {
+      keys(
+        entry,
+        `source.input.request.evidence[${index}]`,
+        ["evidenceId", "revision", "kind", "capturedAt", "sourceRef", "sourceSha256"]
+      );
+    });
+  }
+  keys(input.verification, "source.input.verification", ["checkedAt", "verified"], ["onChainStatus"]);
+}
+
+function line(
+  value: Record<string, unknown>,
   quantityKey: "quantityRequested" | "quantityClaimed",
   index: number
 ): RemedyLineBinding {
-  const lineIndex = line.lineIndex;
+  const lineIndex = value.lineIndex;
   if (typeof lineIndex !== "number" || !Number.isSafeInteger(lineIndex) || lineIndex < 0) {
     throw new PostSaleRemedyValidationError(`source lines[${index}].lineIndex is invalid`);
   }
-  const name = line.name;
-  if (typeof name !== "string" || name.trim().length === 0 || name.length > 512 || /\p{C}/u.test(name)) {
+  const name = value.name;
+  if (typeof name !== "string" || !name.trim() || name.length > 512 || /\p{C}/u.test(name)) {
     throw new PostSaleRemedyValidationError(`source lines[${index}].name is invalid`);
   }
-  const quantity = line[quantityKey];
-  if (typeof quantity !== "number" || !Number.isSafeInteger(quantity) || quantity <= 0 || quantity > 999) {
+  const quantity = value[quantityKey];
+  if (typeof quantity !== "number" || !Number.isSafeInteger(quantity) || quantity < 1 || quantity > 999) {
     throw new PostSaleRemedyValidationError(`source lines[${index}].${quantityKey} is invalid`);
   }
   let id: string | number | undefined;
-  if (line.id !== undefined) {
-    if (typeof line.id === "string") {
-      if (line.id.trim().length === 0 || line.id.length > 256 || /\p{C}/u.test(line.id)) {
-        throw new PostSaleRemedyValidationError(`source lines[${index}].id is invalid`);
-      }
-      id = line.id;
-    } else if (typeof line.id === "number" && Number.isSafeInteger(line.id)) {
-      id = line.id;
+  if (value.id !== undefined) {
+    if (typeof value.id === "string" && value.id.trim() && value.id.length <= 256 && !/\p{C}/u.test(value.id)) {
+      id = value.id;
+    } else if (typeof value.id === "number" && Number.isSafeInteger(value.id)) {
+      id = value.id;
     } else {
       throw new PostSaleRemedyValidationError(`source lines[${index}].id is invalid`);
     }
   }
+  return { lineIndex, ...(id === undefined ? {} : { id }), name: name.trim(), quantity };
+}
+
+async function inspect(source: RemedySource) {
+  keys(source, "source", ["kind", "packet", "input"]);
+  if (source.kind !== "RETURN" && source.kind !== "WARRANTY") {
+    throw new PostSaleRemedyValidationError("source.kind is unsupported");
+  }
+  validateSourceInput(source);
+
+  if (source.kind === "RETURN") {
+    if (source.packet.schemaVersion !== "mova.return-review/v1") {
+      throw new PostSaleRemedyValidationError("return source schema is unsupported");
+    }
+    const lines = source.packet.request.lines
+      .map((value, index) => line(value as unknown as Record<string, unknown>, "quantityRequested", index))
+      .sort((a, b) => a.lineIndex - b.lineIndex);
+    return {
+      kind: "RETURN" as const,
+      verified: await verifyReturnReviewPacket(source.packet, source.input),
+      ready: source.packet.receipt.decision === "READY_FOR_MERCHANT_RETURN_REVIEW",
+      sourceReviewId: sourceText(source.packet.request.requestId, "source.requestId", 192),
+      sourcePacketDigest: digest(source.packet.receipt.packetDigest, "source.packetDigest"),
+      orderId: sourceText(source.packet.order.orderId, "source.orderId", 128),
+      sourceEvaluatedAt: canonicalUtc(source.packet.receipt.evaluatedAt, "source.evaluatedAt"),
+      lines,
+    };
+  }
+
+  if (source.packet.schemaVersion !== "mova.warranty-review/v1") {
+    throw new PostSaleRemedyValidationError("warranty source schema is unsupported");
+  }
+  const lines = source.packet.request.lines
+    .map((value, index) => line(value as unknown as Record<string, unknown>, "quantityClaimed", index))
+    .sort((a, b) => a.lineIndex - b.lineIndex);
   return {
-    lineIndex,
-    ...(id === undefined ? {} : { id }),
-    name: name.trim(),
-    quantity,
+    kind: "WARRANTY" as const,
+    verified: await verifyWarrantyReviewPacket(source.packet, source.input),
+    ready: source.packet.receipt.decision === "READY_FOR_MERCHANT_WARRANTY_REVIEW",
+    sourceReviewId: sourceText(source.packet.request.claimId, "source.claimId", 192),
+    sourcePacketDigest: digest(source.packet.receipt.packetDigest, "source.packetDigest"),
+    orderId: sourceText(source.packet.order.orderId, "source.orderId", 128),
+    sourceEvaluatedAt: canonicalUtc(source.packet.receipt.evaluatedAt, "source.evaluatedAt"),
+    lines,
   };
 }
 
-function reasonCompatible(action: RemedyAction, reason: RemedyReasonCode): boolean {
-  if (action === "REQUEST_MORE_EVIDENCE") {
-    return reason === "EVIDENCE_INSUFFICIENT" || reason === "TECHNICAL_REVIEW";
+function compatible(actionValue: RemedyAction, reasonValue: RemedyReasonCode): boolean {
+  if (actionValue === "REQUEST_MORE_EVIDENCE") {
+    return reasonValue === "EVIDENCE_INSUFFICIENT" || reasonValue === "TECHNICAL_REVIEW";
   }
-  if (action === "HOLD") {
-    return reason === "OWNER_HOLD" || reason === "TECHNICAL_REVIEW";
+  if (actionValue === "HOLD") return reasonValue === "OWNER_HOLD" || reasonValue === "TECHNICAL_REVIEW";
+  if (actionValue === "DENY_REMEDY") {
+    return ["POLICY_INELIGIBLE", "EVIDENCE_INSUFFICIENT", "TECHNICAL_REVIEW"].includes(reasonValue);
   }
-  if (action === "DENY_REMEDY") {
-    return (
-      reason === "POLICY_INELIGIBLE" ||
-      reason === "EVIDENCE_INSUFFICIENT" ||
-      reason === "TECHNICAL_REVIEW"
-    );
-  }
-  return (
-    reason === "EVIDENCE_SUFFICIENT" ||
-    reason === "POLICY_ELIGIBLE" ||
-    reason === "GOODWILL" ||
-    reason === "TECHNICAL_REVIEW"
-  );
+  return ["EVIDENCE_SUFFICIENT", "POLICY_ELIGIBLE", "GOODWILL", "TECHNICAL_REVIEW"].includes(reasonValue);
 }
 
-function remedyForAction(action: RemedyAction): RemedyKind | undefined {
-  if (action === "APPROVE_REFUND_REVIEW_HANDOFF") return "REFUND";
-  if (action === "APPROVE_REPLACEMENT_REVIEW_HANDOFF") return "REPLACEMENT";
-  if (action === "APPROVE_EXCHANGE_REVIEW_HANDOFF") return "EXCHANGE";
-  if (action === "APPROVE_REPAIR_REVIEW_HANDOFF") return "REPAIR";
+function remedy(actionValue: RemedyAction): RemedyKind | undefined {
+  if (actionValue === "APPROVE_REFUND_REVIEW_HANDOFF") return "REFUND";
+  if (actionValue === "APPROVE_REPLACEMENT_REVIEW_HANDOFF") return "REPLACEMENT";
+  if (actionValue === "APPROVE_EXCHANGE_REVIEW_HANDOFF") return "EXCHANGE";
+  if (actionValue === "APPROVE_REPAIR_REVIEW_HANDOFF") return "REPAIR";
   return undefined;
 }
 
-async function inspectSource(source: RemedySource) {
-  assertKeys(source, "source", ["kind", "packet", "input"]);
-  if (source.kind === "RETURN") {
-    const packet = source.packet;
-    if (packet.schemaVersion !== "mova.return-review/v1") {
-      throw new PostSaleRemedyValidationError("return source schema is unsupported");
-    }
-    const verified = await verifyReturnReviewPacket(packet, source.input);
-    const lines = packet.request.lines.map((line, index) =>
-      normalizeLine(line as unknown as Record<string, unknown>, "quantityRequested", index)
-    );
-    lines.sort((a, b) => a.lineIndex - b.lineIndex);
-    return {
-      kind: "RETURN" as const,
-      verified,
-      ready: packet.receipt.decision === "READY_FOR_MERCHANT_RETURN_REVIEW",
-      sourceReviewId: boundedSourceText(packet.request.requestId, "source.requestId", 192),
-      sourcePacketDigest: sha256Value(packet.receipt.packetDigest, "source.packetDigest"),
-      orderId: boundedSourceText(packet.order.orderId, "source.orderId", 128),
-      sourceEvaluatedAt: canonicalUtc(packet.receipt.evaluatedAt, "source.evaluatedAt"),
-      lines,
-    };
-  }
-  if (source.kind === "WARRANTY") {
-    const packet = source.packet;
-    if (packet.schemaVersion !== "mova.warranty-review/v1") {
-      throw new PostSaleRemedyValidationError("warranty source schema is unsupported");
-    }
-    const verified = await verifyWarrantyReviewPacket(packet, source.input);
-    const lines = packet.request.lines.map((line, index) =>
-      normalizeLine(line as unknown as Record<string, unknown>, "quantityClaimed", index)
-    );
-    lines.sort((a, b) => a.lineIndex - b.lineIndex);
-    return {
-      kind: "WARRANTY" as const,
-      verified,
-      ready: packet.receipt.decision === "READY_FOR_MERCHANT_WARRANTY_REVIEW",
-      sourceReviewId: boundedSourceText(packet.request.claimId, "source.claimId", 192),
-      sourcePacketDigest: sha256Value(packet.receipt.packetDigest, "source.packetDigest"),
-      orderId: boundedSourceText(packet.order.orderId, "source.orderId", 128),
-      sourceEvaluatedAt: canonicalUtc(packet.receipt.evaluatedAt, "source.evaluatedAt"),
-      lines,
-    };
-  }
-  throw new PostSaleRemedyValidationError("source.kind is unsupported");
-}
-
-export async function compilePostSaleRemedy(
-  input: CompilePostSaleRemedyInput
-): Promise<PostSaleRemedyPacket> {
-  assertKeys(input, "input", ["source", "decisions", "evaluatedAt"]);
-  const evaluatedAt = canonicalUtc(input.evaluatedAt, "evaluatedAt");
-  const source = await inspectSource(input.source);
-  const decisionSet = normalizeDecisionSet(input.decisions);
+export async function compilePostSaleRemedy(input: CompilePostSaleRemedyInput): Promise<PostSaleRemedyPacket> {
+  keys(input, "input", ["source", "decisions", "evaluatedAt"]);
+  const evaluatedAt = wholeSecondUtc(input.evaluatedAt, "evaluatedAt");
+  const source = await inspect(input.source);
+  const decisions = normalizeDecisions(input.decisions);
   const blockers: string[] = [];
-
   const lineSetDigest = await postSaleRemedySha256Hex(canonicalPostSaleRemedyJson(source.lines));
-  if (!source.verified) blockers.push("SOURCE_VERIFICATION_FAILED");
-  if (decisionSet.replayConflict) blockers.push("DECISION_ID_REPLAY_CONFLICT");
-  if (decisionSet.unique.length !== 1) blockers.push("MULTIPLE_DECISION_IDENTITIES");
 
-  const decision = decisionSet.unique.length === 1 ? decisionSet.unique[0] : undefined;
+  if (!source.verified) blockers.push("SOURCE_VERIFICATION_FAILED");
+  if (decisions.conflict) blockers.push("DECISION_ID_REPLAY_CONFLICT");
+  if (decisions.values.length !== 1) blockers.push("MULTIPLE_DECISION_IDENTITIES");
+
+  const selected = decisions.values.length === 1 ? decisions.values[0] : undefined;
   const evaluatedMs = new Date(evaluatedAt).getTime();
-  const sourceEvaluatedMs = new Date(source.sourceEvaluatedAt).getTime();
-  if (sourceEvaluatedMs > evaluatedMs) blockers.push("SOURCE_EVALUATED_IN_FUTURE");
+  const sourceMs = new Date(source.sourceEvaluatedAt).getTime();
+  if (sourceMs > evaluatedMs) blockers.push("SOURCE_EVALUATED_IN_FUTURE");
 
   let decisionDigest: string | undefined;
-  if (decision) {
-    decisionDigest = await postSaleRemedySha256Hex(canonicalPostSaleRemedyJson(decision));
-    const decidedMs = new Date(decision.decidedAt).getTime();
-    if (decidedMs < sourceEvaluatedMs) blockers.push("DECISION_PREDATES_SOURCE_REVIEW");
-    if (decidedMs > evaluatedMs) blockers.push("DECISION_IN_FUTURE");
-    if (decision.sourcePacketDigest !== source.sourcePacketDigest) {
-      blockers.push("DECISION_SOURCE_DIGEST_MISMATCH");
-    }
-    if (!reasonCompatible(decision.action, decision.reasonCode)) {
-      blockers.push("DECISION_REASON_INCOMPATIBLE");
-    }
-    if (source.kind === "RETURN" && decision.action === "APPROVE_REPAIR_REVIEW_HANDOFF") {
+  if (selected) {
+    decisionDigest = await postSaleRemedySha256Hex(canonicalPostSaleRemedyJson(selected));
+    const decisionMs = new Date(selected.decidedAt).getTime();
+    if (decisionMs < sourceMs) blockers.push("DECISION_PREDATES_SOURCE_REVIEW");
+    if (decisionMs > evaluatedMs) blockers.push("DECISION_IN_FUTURE");
+    if (selected.sourcePacketDigest !== source.sourcePacketDigest) blockers.push("DECISION_SOURCE_DIGEST_MISMATCH");
+    if (!compatible(selected.action, selected.reasonCode)) blockers.push("DECISION_REASON_INCOMPATIBLE");
+    if (source.kind === "RETURN" && selected.action === "APPROVE_REPAIR_REVIEW_HANDOFF") {
       blockers.push("REPAIR_NOT_SUPPORTED_BY_RETURN_REVIEW");
     }
   }
 
   let state: RemedyState;
-  if (blockers.length > 0) {
-    state = "HOLD";
-  } else if (!source.ready) {
-    state = "SOURCE_NOT_REVIEW_READY";
-  } else if (!decision) {
-    state = "HOLD";
-    blockers.push("DECISION_REQUIRED");
-  } else if (decision.action === "DENY_REMEDY") {
-    state = "REMEDY_DENIED";
-  } else if (decision.action === "REQUEST_MORE_EVIDENCE") {
-    state = "MORE_EVIDENCE_REQUIRED";
-  } else if (decision.action === "HOLD") {
-    state = "OWNER_HOLD";
-  } else {
-    state = "READY_FOR_OWNER_EXECUTION_REVIEW";
-  }
+  if (blockers.length) state = "HOLD";
+  else if (!source.ready) state = "SOURCE_NOT_REVIEW_READY";
+  else if (!selected) state = "HOLD";
+  else if (selected.action === "DENY_REMEDY") state = "REMEDY_DENIED";
+  else if (selected.action === "REQUEST_MORE_EVIDENCE") state = "MORE_EVIDENCE_REQUIRED";
+  else if (selected.action === "HOLD") state = "OWNER_HOLD";
+  else state = "READY_FOR_OWNER_EXECUTION_REVIEW";
 
   let handoff: RemedyHandoff | undefined;
   let handoffDigest: string | undefined;
-  if (state === "READY_FOR_OWNER_EXECUTION_REVIEW" && decision && decisionDigest) {
-    const requestedRemedy = remedyForAction(decision.action);
-    if (!requestedRemedy) {
-      throw new PostSaleRemedyValidationError("approved remedy action has no handoff mapping");
-    }
-    const handoffSeed = {
+  if (state === "READY_FOR_OWNER_EXECUTION_REVIEW" && selected && decisionDigest) {
+    const requestedRemedy = remedy(selected.action);
+    if (!requestedRemedy) throw new PostSaleRemedyValidationError("approved action has no handoff mapping");
+    const seed = {
       schemaVersion: POST_SALE_REMEDY_SCHEMA,
       sourceKind: source.kind,
       sourceReviewId: source.sourceReviewId,
       sourcePacketDigest: source.sourcePacketDigest,
       orderId: source.orderId,
       lineSetDigest,
-      decisionId: decision.decisionId,
+      decisionId: selected.decisionId,
       decisionDigest,
       requestedRemedy,
       createdAt: evaluatedAt,
@@ -528,8 +525,8 @@ export async function compilePostSaleRemedy(
       buyerAcceptanceClaimed: false as const,
       cashOrRevenueClaimed: false as const,
     };
-    const handoffId = `handoff:${(await postSaleRemedySha256Hex(canonicalPostSaleRemedyJson(handoffSeed))).slice(0, 32)}`;
-    handoff = { ...handoffSeed, handoffId };
+    const handoffId = `handoff:${(await postSaleRemedySha256Hex(canonicalPostSaleRemedyJson(seed))).slice(0, 32)}`;
+    handoff = { ...seed, handoffId };
     handoffDigest = await postSaleRemedySha256Hex(canonicalPostSaleRemedyJson(handoff));
   }
 
@@ -543,7 +540,7 @@ export async function compilePostSaleRemedy(
     sourcePacketDigest: source.sourcePacketDigest,
     orderId: source.orderId,
     lineSetDigest,
-    ...(decision ? { decisionId: decision.decisionId } : {}),
+    ...(selected ? { decisionId: selected.decisionId } : {}),
     ...(decisionDigest ? { decisionDigest } : {}),
     ...(handoffDigest ? { handoffDigest } : {}),
     evaluatedAt,
@@ -557,9 +554,10 @@ export async function compilePostSaleRemedy(
     buyerAcceptanceClaimed: false as const,
     cashOrRevenueClaimed: false as const,
   };
-  const packetDigest = await postSaleRemedySha256Hex(canonicalPostSaleRemedyJson(receiptCore));
-  const receipt: PostSaleRemedyReceipt = { ...receiptCore, packetDigest };
-
+  const receipt: PostSaleRemedyReceipt = {
+    ...receiptCore,
+    packetDigest: await postSaleRemedySha256Hex(canonicalPostSaleRemedyJson(receiptCore)),
+  };
   return {
     schemaVersion: POST_SALE_REMEDY_SCHEMA,
     source: {
@@ -570,7 +568,7 @@ export async function compilePostSaleRemedy(
       lineSetDigest,
       lines: source.lines,
     },
-    ...(decision ? { decision } : {}),
+    ...(selected ? { decision: selected } : {}),
     ...(handoff ? { handoff } : {}),
     receipt,
   };
