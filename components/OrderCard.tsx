@@ -8,6 +8,7 @@ import { FaCreditCard, FaExternalLinkAlt, FaCheckCircle, FaCopy, FaCheck } from 
 import { MdLocalShipping, MdPayment, MdPending, MdCancel } from "react-icons/md";
 import { BuyerOrder, verifyOrderOnChain } from "../lib/buyer-orders";
 import { NETWORK } from "../lib/stellar/config";
+import ReturnReviewPanel from "./ReturnReviewPanel";
 
 interface OrderCardProps {
   order: BuyerOrder;
@@ -186,6 +187,10 @@ export default function OrderCard({ order }: OrderCardProps) {
           )}
         </div>
       </div>
+
+      {(order.status === "Shipped" || order.status === "Completed") && (
+        <ReturnReviewPanel order={order} />
+      )}
     </div>
   );
 }
