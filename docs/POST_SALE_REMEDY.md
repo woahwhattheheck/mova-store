@@ -4,7 +4,7 @@
 
 ## What it does
 
-The compiler accepts exactly one already-built return-review or warranty-review source, **re-runs that source module's verifier against the exact source input**, and requires the source receipt to be review-ready. It then binds an immutable merchant decision to the exact source packet digest, order, review/claim identity, and selected line set.
+The compiler accepts exactly one already-built return-review or warranty-review source, validates the exact runtime shape of that source input, **re-runs that source module's verifier against the exact source input**, and requires the source receipt to be review-ready. It then binds an immutable merchant decision to the exact source packet digest, order, review/claim identity, and selected line set.
 
 Approved dispositions can create a deterministic local handoff for one of:
 
@@ -36,7 +36,9 @@ Every generated handoff and receipt carries those authority fields as false.
 ## Integrity model
 
 - Source packets are not trusted by self-hash: the existing return/warranty verifier recompiles from the exact source input.
+- The wrapper rejects unknown runtime keys in upstream order/request/selection/evidence/verification input before calling the source verifier, so ignored source-input fields cannot become unbound side-channel authority.
 - Merchant decision events use exact runtime key sets and controlled enums. Durable authority fields reject URLs, email/phone, path-shaped values, and common credential shapes.
+- Merchant `decidedAt` and trusted wrapper `evaluatedAt` must use canonical whole-second UTC; upstream review timestamps retain the source module's canonical UTC precision.
 - Exact duplicate decision replay collapses deterministically. Changed bytes under the same decision ID fail closed. Multiple independent decision IDs are a v1 conflict rather than an inferred supersession chain.
 - Decision chronology must follow the source review and precede the trusted evaluation time.
 - Canonical JSON and SHA-256 bind the selected line set, decision, optional handoff, and final receipt.
