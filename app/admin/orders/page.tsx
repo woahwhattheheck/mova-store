@@ -1,461 +1,200 @@
 "use client";
-import React, { useState, useEffect, useCallback } from "react";
+
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { AiOutlineLoading3Quarters } from "react-icons/ai";
+import { MdCancel, MdCheckCircle, MdLocalShipping, MdPayment, MdPending, MdRefresh, MdWarning } from "react-icons/md";
+import { SiStellar } from "react-icons/si";
+
 import AdminGuard from "../../../components/AdminGuard";
 import FulfillmentDispatchControl from "../../../components/FulfillmentDispatchControl";
 import StellarWalletButton from "../../../components/StellarWalletButton";
-import { PaymentEventIndexer, IndexedEvent } from "../../../lib/stellar/indexer";
-import {
-  refundOrder,
-  OrderEvent,
-  eventToOrder,
-  OrderStatus,
-} from "../../../lib/stellar/orders";
+import { merchantRowToDisplayAmount, type MerchantOrderRow } from "../../../lib/merchant-order-index";
+import { supabase } from "../../../lib/supabase";
 import { NETWORK, CHECKOUT_CONTRACT_ID } from "../../../lib/stellar/config";
-import { AiOutlineLoading3Quarters } from "react-icons/ai";
-import {
-  MdRefresh,
-  MdCheckCircle,
-  MdLocalShipping,
-  MdPayment,
-  MdPending,
-  MdCancel,
-} from "react-icons/md";
-import { SiStellar } from "react-icons/si";
-import Link from "next/link";
+import { refundOrder } from "../../../lib/stellar/orders";
 
-const StatusBadge = ({ status }: { status: OrderStatus }) => {
-  const statusConfig: Record<
-    OrderStatus,
-    { bg: string; text: string; icon: React.ReactNode }
-  > = {
-    Pending: {
-      bg: "bg-yellow-100",
-      text: "text-yellow-800",
-      icon: <MdPending className="mr-1" />,
-    },
-    Paid: {
-      bg: "bg-blue-100",
-      text: "text-blue-800",
-      icon: <MdPayment className="mr-1" />,
-    },
-    Shipped: {
-      bg: "bg-green-100",
-      text: "text-green-800",
-      icon: <MdLocalShipping className="mr-1" />,
-    },
-    Refunded: {
-      bg: "bg-purple-100",
-      text: "text-purple-800",
-      icon: <MdCancel className="mr-1" />,
-    },
-    Unknown: {
-      bg: "bg-gray-100",
-      text: "text-gray-800",
-      icon: null,
-    },
+function truncate(value: string) {
+  if (!value || value.length < 16) return value;
+  return `${value.slice(0, 8)}...${value.slice(-6)}`;
+}
+
+function StatusBadge({ row }: { row: MerchantOrderRow }) {
+  const styles: Record<string, string> = {
+    Quoted: "bg-gray-100 text-gray-800",
+    Pending: "bg-yellow-100 text-yellow-800",
+    Paid: "bg-blue-100 text-blue-800",
+    Shipped: "bg-green-100 text-green-800",
+    Refunded: "bg-purple-100 text-purple-800",
+    Unknown: "bg-gray-100 text-gray-800",
+    Conflict: "bg-red-100 text-red-800",
   };
-
-  const config = statusConfig[status] || statusConfig.Unknown;
   return (
-    <span
-      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${config.bg} ${config.text}`}
-    >
-      {config.icon}
-      {status}
-    </span>
+    <div>
+      <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${styles[row.chainStatus] || styles.Unknown}`}>
+        {row.chainStatus}
+      </span>
+      {row.identityConflict && (
+        <div className="mt-1 text-xs text-red-700">{row.conflictReasons.join(", ")}</div>
+      )}
+    </div>
   );
-};
+}
 
-const formatDate = (timestamp: number) => {
-  return new Date(timestamp).toLocaleString("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-};
-
-const truncateAddress = (address: string) => {
-  if (!address || address.length < 12) return address;
-  return `${address.slice(0, 6)}...${address.slice(-4)}`;
-};
-
-const OrderRow = ({
-  order,
-  onRefund,
-  isProcessing,
-}: {
-  order: OrderEvent;
-  onRefund: (orderId: string) => void;
-  isProcessing: boolean;
-}) => {
-  const canTrack = order.status === "Paid" || order.status === "Shipped";
-  const canRefund = order.status === "Paid";
-
+function OrderRow({ row, processing, onRefund }: { row: MerchantOrderRow; processing: boolean; onRefund: (id: string) => void }) {
+  const canTrack = row.chainStatus === "Paid" || row.chainStatus === "Shipped";
+  const canRefund = row.chainStatus === "Paid" && !row.identityConflict;
+  const created = row.chainTimestamp
+    ? new Date(row.chainTimestamp * 1000).toLocaleString()
+    : new Date(row.quoteCreatedAt).toLocaleString();
   return (
     <tr className="border-b hover:bg-gray-50">
-      <td className="py-4 px-4">
-        <div className="font-mono text-xs text-gray-600">
-          {truncateAddress(order.orderId)}
-        </div>
+      <td className="px-4 py-4 font-mono text-xs text-gray-600" title={row.orderId}>{truncate(row.orderId)}</td>
+      <td className="px-4 py-4 font-mono text-xs text-gray-600" title={row.buyer}>{truncate(row.buyer)}</td>
+      <td className="px-4 py-4 font-semibold">{merchantRowToDisplayAmount(row)} {row.tokenSymbol}</td>
+      <td className="px-4 py-4"><StatusBadge row={row} /></td>
+      <td className="px-4 py-4 text-sm text-gray-500">{created}</td>
+      <td className="px-4 py-4 text-xs text-gray-500">
+        {row.lastReconcileError ? <span className="text-amber-700">RPC retry needed</span> : "Direct contract read"}
       </td>
-      <td className="py-4 px-4">
-        <div className="font-mono text-xs text-gray-600">
-          {truncateAddress(order.buyer)}
-        </div>
-      </td>
-      <td className="py-4 px-4">
-        <div className="font-semibold">
-          {order.amount} {order.tokenSymbol}
-        </div>
-      </td>
-      <td className="py-4 px-4">
-        <StatusBadge status={order.status} />
-      </td>
-      <td className="py-4 px-4 text-sm text-gray-500">
-        {formatDate(order.timestamp)}
-      </td>
-      <td className="py-4 px-4 text-sm">
-        <a
-          href={`https://stellar.expert/explorer/${NETWORK}/tx/${order.txHash}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-blue-600 hover:underline font-mono text-xs"
-        >
-          {truncateAddress(order.txHash)}
-        </a>
-      </td>
-      <td className="py-4 px-4 align-top">
+      <td className="px-4 py-4 align-top">
         <div className="flex items-start gap-2">
-          {canTrack && (
+          {canTrack && !row.identityConflict && (
             <FulfillmentDispatchControl
-              orderId={order.orderId}
-              orderStatus={order.status as "Paid" | "Shipped"}
-              disabled={isProcessing}
+              orderId={row.orderId}
+              orderStatus={row.chainStatus as "Paid" | "Shipped"}
+              disabled={processing}
             />
           )}
           {canRefund && (
-            <button
-              onClick={() => onRefund(order.orderId)}
-              disabled={isProcessing}
-              className="px-3 py-1 text-sm bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-            >
-              {isProcessing ? (
-                <AiOutlineLoading3Quarters className="animate-spin" />
-              ) : (
-                <MdCancel />
-              )}
-              Refund
+            <button onClick={() => onRefund(row.orderId)} disabled={processing}
+              className="flex items-center gap-1 rounded bg-purple-600 px-3 py-1 text-sm text-white hover:bg-purple-700 disabled:opacity-50">
+              {processing ? <AiOutlineLoading3Quarters className="animate-spin" /> : <MdCancel />} Refund
             </button>
           )}
-          {!canTrack && !canRefund && (
-            <span className="text-gray-400 text-sm">-</span>
-          )}
+          {!canTrack && !canRefund && <span className="text-sm text-gray-400">-</span>}
         </div>
       </td>
     </tr>
   );
-};
+}
 
-const OrdersManagementContent = () => {
-  const [orders, setOrders] = useState<Map<string, OrderEvent>>(new Map());
-  const [isLoading, setIsLoading] = useState(true);
-  const [processingOrderId, setProcessingOrderId] = useState<string | null>(
-    null
-  );
+function OrdersManagementContent() {
+  const [orders, setOrders] = useState<MerchantOrderRow[]>([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [indexerStatus, setIndexerStatus] = useState<{
-    running: boolean;
-    eventsSeen: number;
-  }>({ running: false, eventsSeen: 0 });
+  const [success, setSuccess] = useState<string | null>(null);
+  const [processingOrderId, setProcessingOrderId] = useState<string | null>(null);
 
-  useEffect(() => {
-    const indexer = new PaymentEventIndexer();
-
-    indexer.start({
-      onEvent: (event: IndexedEvent) => {
-        const order = eventToOrder(event);
-        if (order) {
-          setOrders((prev) => {
-            const newMap = new Map(prev);
-            const existing = newMap.get(order.orderId);
-            if (existing) {
-              if (event.ledger > (existing.ledger || 0)) {
-                newMap.set(order.orderId, { ...existing, ...order });
-              }
-            } else {
-              newMap.set(order.orderId, order);
-            }
-            return newMap;
-          });
-        }
-      },
-      onStatus: (status) => {
-        setIndexerStatus({
-          running: status.running,
-          eventsSeen: status.eventsSeen,
-        });
-        setIsLoading(false);
-      },
-      onError: (err) => {
-        setError(err.message);
-        setIsLoading(false);
-      },
-    });
-
-    const loadingTimeout = setTimeout(() => {
-      setIsLoading(false);
-    }, 2000);
-
-    return () => {
-      indexer.stop();
-      clearTimeout(loadingTimeout);
-    };
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { data, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !data.session?.access_token) throw new Error("Admin session is unavailable");
+      const response = await fetch("/api/admin/orders?limit=250", {
+        headers: { Authorization: `Bearer ${data.session.access_token}` },
+        cache: "no-store",
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || "Durable order index request failed");
+      if (body.retentionIndependent !== true || body.source !== "durable-quote-index+direct-contract-read") {
+        throw new Error("Durable order index returned an unexpected source");
+      }
+      setOrders(Array.isArray(body.orders) ? body.orders : []);
+    } catch (err) {
+      setOrders([]);
+      setError(err instanceof Error ? err.message : "Durable merchant order index is unavailable");
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => { void load(); }, [load]);
 
   const handleRefund = useCallback(async (orderId: string) => {
     setProcessingOrderId(orderId);
     setError(null);
-    setSuccessMessage(null);
-
+    setSuccess(null);
     try {
       const result = await refundOrder(orderId);
-
-      if (result.success) {
-        setSuccessMessage(
-          `Order ${truncateAddress(orderId)} refunded successfully!`
-        );
-        setOrders((prev) => {
-          const newMap = new Map(prev);
-          const existing = newMap.get(orderId);
-          if (existing) {
-            newMap.set(orderId, { ...existing, status: "Refunded" });
-          }
-          return newMap;
-        });
-      } else {
-        setError(result.error || "Failed to refund order");
-      }
+      if (!result.success) throw new Error(result.error || "Failed to refund order");
+      setSuccess(`Order ${truncate(orderId)} refunded successfully.`);
+      await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown error occurred");
+      setError(err instanceof Error ? err.message : "Refund failed");
     } finally {
       setProcessingOrderId(null);
     }
-  }, []);
+  }, [load]);
 
-  const sortedOrders = Array.from(orders.values()).sort(
-    (a, b) => b.timestamp - a.timestamp
-  );
-
-  const stats = {
-    total: sortedOrders.length,
-    pending: sortedOrders.filter((o) => o.status === "Pending").length,
-    paid: sortedOrders.filter((o) => o.status === "Paid").length,
-    shipped: sortedOrders.filter((o) => o.status === "Shipped").length,
-    refunded: sortedOrders.filter((o) => o.status === "Refunded").length,
-  };
+  const stats = useMemo(() => ({
+    total: orders.length,
+    quoted: orders.filter((o) => o.chainStatus === "Quoted").length,
+    paid: orders.filter((o) => o.chainStatus === "Paid").length,
+    shipped: orders.filter((o) => o.chainStatus === "Shipped").length,
+    conflicts: orders.filter((o) => o.identityConflict).length,
+  }), [orders]);
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <div className="flex justify-between items-center mb-8">
+      <div className="mb-8 flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-800">Order Management</h1>
-          <p className="text-gray-500 mt-1">
-            Manage Stellar escrow orders with evidence-bound shipment tracking
-          </p>
+          <p className="mt-1 text-gray-500">Durable merchant order discovery + direct contract reconciliation</p>
         </div>
         <div className="flex items-center gap-4">
           <StellarWalletButton />
-          <Link
-            href="/admin"
-            className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
-          >
-            Back to Products
-          </Link>
+          <Link href="/admin" className="rounded bg-gray-200 px-4 py-2 text-gray-700 hover:bg-gray-300">Back to Products</Link>
         </div>
       </div>
 
-      <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6 flex items-center gap-3">
-        <SiStellar className="text-purple-600 text-xl" />
+      <div className="mb-6 flex items-center gap-3 rounded-lg border border-purple-200 bg-purple-50 p-4">
+        <SiStellar className="text-xl text-purple-600" />
         <div>
-          <span className="font-medium text-purple-800">
-            Stellar {NETWORK.toUpperCase()}
-          </span>
-          <span className="text-purple-600 ml-2 text-sm">
-            Contract: {truncateAddress(CHECKOUT_CONTRACT_ID)}
-          </span>
+          <span className="font-medium text-purple-800">Stellar {NETWORK.toUpperCase()}</span>
+          <span className="ml-2 text-sm text-purple-600">Contract: {truncate(CHECKOUT_CONTRACT_ID)}</span>
         </div>
-        <div className="ml-auto flex items-center gap-2 text-sm text-purple-600">
-          <span
-            className={`w-2 h-2 rounded-full ${
-              indexerStatus.running ? "bg-green-500" : "bg-purple-500"
-            }`}
-          />
-          {indexerStatus.eventsSeen} events indexed
-        </div>
+        <div className="ml-auto text-sm text-purple-700">Retention-independent queue</div>
       </div>
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
-          {error}
-        </div>
-      )}
-      {successMessage && (
-        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded mb-4 flex items-center gap-2">
-          <MdCheckCircle className="text-green-500" />
-          {successMessage}
-        </div>
-      )}
+      {error && <div className="mb-4 flex items-center gap-2 rounded border border-red-200 bg-red-50 px-4 py-3 text-red-700"><MdWarning />{error}</div>}
+      {success && <div className="mb-4 flex items-center gap-2 rounded border border-green-200 bg-green-50 px-4 py-3 text-green-700"><MdCheckCircle />{success}</div>}
 
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
-        <div className="bg-white rounded-lg shadow p-4">
-          <div className="text-gray-500 text-sm">Total Orders</div>
-          <div className="text-2xl font-bold text-gray-800">{stats.total}</div>
-        </div>
-        <div className="bg-yellow-50 rounded-lg shadow p-4">
-          <div className="text-yellow-600 text-sm flex items-center gap-1">
-            <MdPending /> Pending
-          </div>
-          <div className="text-2xl font-bold text-yellow-800">
-            {stats.pending}
-          </div>
-        </div>
-        <div className="bg-blue-50 rounded-lg shadow p-4">
-          <div className="text-blue-600 text-sm flex items-center gap-1">
-            <MdPayment /> Paid (Escrow)
-          </div>
-          <div className="text-2xl font-bold text-blue-800">{stats.paid}</div>
-        </div>
-        <div className="bg-green-50 rounded-lg shadow p-4">
-          <div className="text-green-600 text-sm flex items-center gap-1">
-            <MdLocalShipping /> Shipped
-          </div>
-          <div className="text-2xl font-bold text-green-800">
-            {stats.shipped}
-          </div>
-        </div>
-        <div className="bg-red-50 rounded-lg shadow p-4">
-          <div className="text-purple-600 text-sm flex items-center gap-1">
-            <MdCancel /> Refunded
-          </div>
-          <div className="text-2xl font-bold text-purple-800">
-            {stats.refunded}
-          </div>
-        </div>
+      <div className="mb-8 grid grid-cols-2 gap-4 md:grid-cols-5">
+        <div className="rounded-lg bg-white p-4 shadow"><div className="text-sm text-gray-500">Indexed</div><div className="text-2xl font-bold">{stats.total}</div></div>
+        <div className="rounded-lg bg-gray-50 p-4 shadow"><div className="flex items-center gap-1 text-sm text-gray-600"><MdPending />Quoted</div><div className="text-2xl font-bold">{stats.quoted}</div></div>
+        <div className="rounded-lg bg-blue-50 p-4 shadow"><div className="flex items-center gap-1 text-sm text-blue-600"><MdPayment />Paid</div><div className="text-2xl font-bold text-blue-800">{stats.paid}</div></div>
+        <div className="rounded-lg bg-green-50 p-4 shadow"><div className="flex items-center gap-1 text-sm text-green-600"><MdLocalShipping />Shipped</div><div className="text-2xl font-bold text-green-800">{stats.shipped}</div></div>
+        <div className="rounded-lg bg-red-50 p-4 shadow"><div className="flex items-center gap-1 text-sm text-red-600"><MdWarning />Conflicts</div><div className="text-2xl font-bold text-red-800">{stats.conflicts}</div></div>
       </div>
 
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="px-6 py-4 border-b flex justify-between items-center">
-          <h2 className="text-xl font-semibold text-gray-800">Orders</h2>
-          <button
-            onClick={() => window.location.reload()}
-            className="flex items-center gap-2 px-3 py-1 text-gray-600 hover:text-gray-800"
-          >
-            <MdRefresh /> Refresh
-          </button>
+      <div className="overflow-hidden rounded-lg bg-white shadow">
+        <div className="flex items-center justify-between border-b px-6 py-4">
+          <h2 className="text-xl font-semibold text-gray-800">Durable Orders</h2>
+          <button onClick={() => void load()} disabled={loading} className="flex items-center gap-2 px-3 py-1 text-gray-600 hover:text-gray-800 disabled:opacity-50"><MdRefresh /> Refresh</button>
         </div>
-
-        {isLoading ? (
-          <div className="p-12 text-center">
-            <AiOutlineLoading3Quarters className="animate-spin text-4xl text-gray-400 mx-auto mb-4" />
-            <p className="text-gray-500">Loading orders from blockchain...</p>
-          </div>
-        ) : sortedOrders.length === 0 ? (
-          <div className="p-12 text-center">
-            <SiStellar className="text-6xl text-gray-300 mx-auto mb-4" />
-            <p className="text-gray-500 mb-2">No orders found</p>
-            <p className="text-gray-400 text-sm">
-              Orders will appear here when customers pay with Stellar USDC
-            </p>
-          </div>
+        {loading ? (
+          <div className="p-12 text-center"><AiOutlineLoading3Quarters className="mx-auto mb-4 animate-spin text-4xl text-gray-400" /><p className="text-gray-500">Reconciling durable order IDs against contract state...</p></div>
+        ) : orders.length === 0 && !error ? (
+          <div className="p-12 text-center"><SiStellar className="mx-auto mb-4 text-6xl text-gray-300" /><p className="text-gray-500">No durable merchant quotes have been issued yet.</p></div>
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Order ID
-                  </th>
-                  <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Buyer
-                  </th>
-                  <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Amount
-                  </th>
-                  <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Date
-                  </th>
-                  <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    TX Hash
-                  </th>
-                  <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {sortedOrders.map((order) => (
-                  <OrderRow
-                    key={order.orderId}
-                    order={order}
-                    onRefund={handleRefund}
-                    isProcessing={processingOrderId === order.orderId}
-                  />
-                ))}
-              </tbody>
+              <thead className="bg-gray-50"><tr>{["Order ID","Buyer","Amount","Status","Observed","Source","Actions"].map((h) => <th key={h} className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">{h}</th>)}</tr></thead>
+              <tbody>{orders.map((row) => <OrderRow key={row.orderId} row={row} processing={processingOrderId === row.orderId} onRefund={handleRefund} />)}</tbody>
             </table>
           </div>
         )}
       </div>
 
-      <div className="mt-8 bg-gray-50 rounded-lg p-6">
-        <h3 className="font-semibold text-gray-700 mb-3">How it works:</h3>
-        <ul className="space-y-2 text-sm text-gray-600">
-          <li className="flex items-start gap-2">
-            <MdPayment className="text-blue-500 mt-0.5" />
-            <span>
-              <strong>Paid (Escrow):</strong> Customer has paid and funds are
-              held in the smart contract escrow
-            </span>
-          </li>
-          <li className="flex items-start gap-2">
-            <MdLocalShipping className="text-green-500 mt-0.5" />
-            <span>
-              <strong>Track & Ship:</strong> Prepare immutable merchant-provided
-              carrier/tracking evidence, then release escrow through the existing
-              contract dispatch action. Buyer visibility begins only after
-              Shipped is observed.
-            </span>
-          </li>
-          <li className="flex items-start gap-2">
-            <MdCancel className="text-purple-500 mt-0.5" />
-            <span>
-              <strong>Refund:</strong> Return the escrowed funds to the
-              customer's wallet (e.g., if item is out of stock)
-            </span>
-          </li>
-        </ul>
-        <p className="mt-4 text-xs text-gray-500">
-          Only the merchant wallet that deployed the contract can dispatch/refund
-          orders. Tracking receipts are merchant attestations with tamper-evident
-          integrity; they do not independently prove carrier delivery.
-        </p>
+      <div className="mt-8 rounded-lg bg-gray-50 p-6 text-sm text-gray-600">
+        <strong>Completeness model:</strong> each merchant-authorized quote is durably indexed before its XDR is returned. This page enumerates those known IDs and reads contract state directly; a fresh browser session does not reconstruct completeness from a short RPC event window. Identity mismatches fail closed as conflicts.
       </div>
     </div>
   );
-};
+}
 
-const OrdersManagement = () => {
-  return (
-    <AdminGuard>
-      <OrdersManagementContent />
-    </AdminGuard>
-  );
-};
-
-export default OrdersManagement;
+export default function OrdersManagementPage() {
+  return <AdminGuard><OrdersManagementContent /></AdminGuard>;
+}
