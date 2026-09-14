@@ -1,10 +1,10 @@
 "use client";
 import React, { useState, useEffect, useCallback } from "react";
 import AdminGuard from "../../../components/AdminGuard";
+import FulfillmentDispatchControl from "../../../components/FulfillmentDispatchControl";
 import StellarWalletButton from "../../../components/StellarWalletButton";
 import { PaymentEventIndexer, IndexedEvent } from "../../../lib/stellar/indexer";
 import {
-  dispatchOrder,
   refundOrder,
   OrderEvent,
   eventToOrder,
@@ -23,7 +23,6 @@ import {
 import { SiStellar } from "react-icons/si";
 import Link from "next/link";
 
-// Status badge component
 const StatusBadge = ({ status }: { status: OrderStatus }) => {
   const statusConfig: Record<
     OrderStatus,
@@ -57,7 +56,6 @@ const StatusBadge = ({ status }: { status: OrderStatus }) => {
   };
 
   const config = statusConfig[status] || statusConfig.Unknown;
-
   return (
     <span
       className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${config.bg} ${config.text}`}
@@ -68,7 +66,6 @@ const StatusBadge = ({ status }: { status: OrderStatus }) => {
   );
 };
 
-// Format timestamp
 const formatDate = (timestamp: number) => {
   return new Date(timestamp).toLocaleString("en-US", {
     year: "numeric",
@@ -79,25 +76,21 @@ const formatDate = (timestamp: number) => {
   });
 };
 
-// Truncate address for display
 const truncateAddress = (address: string) => {
   if (!address || address.length < 12) return address;
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 };
 
-// Order row component
 const OrderRow = ({
   order,
-  onDispatch,
   onRefund,
   isProcessing,
 }: {
   order: OrderEvent;
-  onDispatch: (orderId: string) => void;
   onRefund: (orderId: string) => void;
   isProcessing: boolean;
 }) => {
-  const canDispatch = order.status === "Paid";
+  const canTrack = order.status === "Paid" || order.status === "Shipped";
   const canRefund = order.status === "Paid";
 
   return (
@@ -133,21 +126,14 @@ const OrderRow = ({
           {truncateAddress(order.txHash)}
         </a>
       </td>
-      <td className="py-4 px-4">
-        <div className="flex gap-2">
-          {canDispatch && (
-            <button
-              onClick={() => onDispatch(order.orderId)}
+      <td className="py-4 px-4 align-top">
+        <div className="flex items-start gap-2">
+          {canTrack && (
+            <FulfillmentDispatchControl
+              orderId={order.orderId}
+              orderStatus={order.status as "Paid" | "Shipped"}
               disabled={isProcessing}
-              className="px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-            >
-              {isProcessing ? (
-                <AiOutlineLoading3Quarters className="animate-spin" />
-              ) : (
-                <MdLocalShipping />
-              )}
-              Ship
-            </button>
+            />
           )}
           {canRefund && (
             <button
@@ -163,7 +149,7 @@ const OrderRow = ({
               Refund
             </button>
           )}
-          {!canDispatch && !canRefund && (
+          {!canTrack && !canRefund && (
             <span className="text-gray-400 text-sm">-</span>
           )}
         </div>
@@ -172,7 +158,6 @@ const OrderRow = ({
   );
 };
 
-// Main orders management content
 const OrdersManagementContent = () => {
   const [orders, setOrders] = useState<Map<string, OrderEvent>>(new Map());
   const [isLoading, setIsLoading] = useState(true);
@@ -186,7 +171,6 @@ const OrdersManagementContent = () => {
     eventsSeen: number;
   }>({ running: false, eventsSeen: 0 });
 
-  // Initialize event indexer
   useEffect(() => {
     const indexer = new PaymentEventIndexer();
 
@@ -196,10 +180,8 @@ const OrdersManagementContent = () => {
         if (order) {
           setOrders((prev) => {
             const newMap = new Map(prev);
-            // Update existing order or add new one
             const existing = newMap.get(order.orderId);
             if (existing) {
-              // Update status if the new event is more recent
               if (event.ledger > (existing.ledger || 0)) {
                 newMap.set(order.orderId, { ...existing, ...order });
               }
@@ -223,7 +205,6 @@ const OrdersManagementContent = () => {
       },
     });
 
-    // Stop after 2 seconds of loading to show UI
     const loadingTimeout = setTimeout(() => {
       setIsLoading(false);
     }, 2000);
@@ -234,39 +215,6 @@ const OrdersManagementContent = () => {
     };
   }, []);
 
-  // Handle dispatch order
-  const handleDispatch = useCallback(async (orderId: string) => {
-    setProcessingOrderId(orderId);
-    setError(null);
-    setSuccessMessage(null);
-
-    try {
-      const result = await dispatchOrder(orderId);
-
-      if (result.success) {
-        setSuccessMessage(
-          `Order ${truncateAddress(orderId)} dispatched successfully!`
-        );
-        // Update local state
-        setOrders((prev) => {
-          const newMap = new Map(prev);
-          const existing = newMap.get(orderId);
-          if (existing) {
-            newMap.set(orderId, { ...existing, status: "Shipped" });
-          }
-          return newMap;
-        });
-      } else {
-        setError(result.error || "Failed to dispatch order");
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown error occurred");
-    } finally {
-      setProcessingOrderId(null);
-    }
-  }, []);
-
-  // Handle refund order
   const handleRefund = useCallback(async (orderId: string) => {
     setProcessingOrderId(orderId);
     setError(null);
@@ -279,7 +227,6 @@ const OrdersManagementContent = () => {
         setSuccessMessage(
           `Order ${truncateAddress(orderId)} refunded successfully!`
         );
-        // Update local state
         setOrders((prev) => {
           const newMap = new Map(prev);
           const existing = newMap.get(orderId);
@@ -298,12 +245,10 @@ const OrdersManagementContent = () => {
     }
   }, []);
 
-  // Sort orders by timestamp (newest first)
   const sortedOrders = Array.from(orders.values()).sort(
     (a, b) => b.timestamp - a.timestamp
   );
 
-  // Stats
   const stats = {
     total: sortedOrders.length,
     pending: sortedOrders.filter((o) => o.status === "Pending").length,
@@ -314,12 +259,11 @@ const OrdersManagementContent = () => {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      {/* Header */}
       <div className="flex justify-between items-center mb-8">
         <div>
           <h1 className="text-3xl font-bold text-gray-800">Order Management</h1>
           <p className="text-gray-500 mt-1">
-            Manage Stellar escrow orders - dispatch or refund payments
+            Manage Stellar escrow orders with evidence-bound shipment tracking
           </p>
         </div>
         <div className="flex items-center gap-4">
@@ -333,7 +277,6 @@ const OrdersManagementContent = () => {
         </div>
       </div>
 
-      {/* Network Info */}
       <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6 flex items-center gap-3">
         <SiStellar className="text-purple-600 text-xl" />
         <div>
@@ -354,7 +297,6 @@ const OrdersManagementContent = () => {
         </div>
       </div>
 
-      {/* Messages */}
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
           {error}
@@ -367,7 +309,6 @@ const OrdersManagementContent = () => {
         </div>
       )}
 
-      {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
         <div className="bg-white rounded-lg shadow p-4">
           <div className="text-gray-500 text-sm">Total Orders</div>
@@ -405,7 +346,6 @@ const OrdersManagementContent = () => {
         </div>
       </div>
 
-      {/* Orders Table */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <div className="px-6 py-4 border-b flex justify-between items-center">
           <h2 className="text-xl font-semibold text-gray-800">Orders</h2>
@@ -463,7 +403,6 @@ const OrdersManagementContent = () => {
                   <OrderRow
                     key={order.orderId}
                     order={order}
-                    onDispatch={handleDispatch}
                     onRefund={handleRefund}
                     isProcessing={processingOrderId === order.orderId}
                   />
@@ -474,7 +413,6 @@ const OrdersManagementContent = () => {
         )}
       </div>
 
-      {/* Help Text */}
       <div className="mt-8 bg-gray-50 rounded-lg p-6">
         <h3 className="font-semibold text-gray-700 mb-3">How it works:</h3>
         <ul className="space-y-2 text-sm text-gray-600">
@@ -488,8 +426,10 @@ const OrdersManagementContent = () => {
           <li className="flex items-start gap-2">
             <MdLocalShipping className="text-green-500 mt-0.5" />
             <span>
-              <strong>Ship:</strong> Release the escrowed funds to your merchant
-              wallet when you ship the order
+              <strong>Track & Ship:</strong> Prepare immutable merchant-provided
+              carrier/tracking evidence, then release escrow through the existing
+              contract dispatch action. Buyer visibility begins only after
+              Shipped is observed.
             </span>
           </li>
           <li className="flex items-start gap-2">
@@ -501,16 +441,15 @@ const OrdersManagementContent = () => {
           </li>
         </ul>
         <p className="mt-4 text-xs text-gray-500">
-          Note: Only the merchant wallet that deployed the contract can
-          dispatch/refund orders. Make sure you're connected with the correct
-          Freighter wallet.
+          Only the merchant wallet that deployed the contract can dispatch/refund
+          orders. Tracking receipts are merchant attestations with tamper-evident
+          integrity; they do not independently prove carrier delivery.
         </p>
       </div>
     </div>
   );
 };
 
-// Wrap with AdminGuard
 const OrdersManagement = () => {
   return (
     <AdminGuard>
