@@ -141,6 +141,7 @@ export interface WarrantyReviewPacket {
     details?: string;
     lines: NormalizedWarrantyLine[];
     evidence: NormalizedWarrantyEvidence[];
+    evidenceHistoryDigest: string;
   };
   verification: {
     checkedAt: string;
@@ -169,6 +170,27 @@ function assertPlainObject(value: unknown, field: string): asserts value is Reco
   const proto = Object.getPrototypeOf(value);
   if (proto !== Object.prototype && proto !== null) {
     throw new WarrantyReviewValidationError(`${field} must be a plain object`);
+  }
+}
+
+function assertKeys(
+  value: unknown,
+  field: string,
+  required: readonly string[],
+  optional: readonly string[] = []
+): asserts value is Record<string, unknown> {
+  assertPlainObject(value, field);
+  const allowed = new Set([...required, ...optional]);
+  const keys = Object.keys(value);
+  for (const key of required) {
+    if (!Object.prototype.hasOwnProperty.call(value, key)) {
+      throw new WarrantyReviewValidationError(`${field} is missing ${key}`);
+    }
+  }
+  for (const key of keys) {
+    if (!allowed.has(key)) {
+      throw new WarrantyReviewValidationError(`${field} contains unknown key ${key}`);
+    }
   }
 }
 
@@ -287,7 +309,7 @@ export async function warrantySha256Hex(value: string): Promise<string> {
 }
 
 function normalizeOrder(orderInput: WarrantyOrderSnapshot) {
-  assertPlainObject(orderInput, "order");
+  assertKeys(orderInput, "order", ["orderId", "paymentMethod", "status", "createdAt", "items"]);
   const orderId = normalizeOrderId(orderInput.orderId);
   const paymentMethod = normalizePaymentMethod(orderInput.paymentMethod);
   const status = normalizeStatus(orderInput.status);
@@ -298,7 +320,7 @@ function normalizeOrder(orderInput: WarrantyOrderSnapshot) {
   }
 
   const items = orderInput.items.map((item, index) => {
-    assertPlainObject(item, `order.items[${index}]`);
+    assertKeys(item, `order.items[${index}]`, ["name"], ["id", "quantity"]);
     const name = boundedText(item.name, `order.items[${index}].name`, 512)!;
     const quantity = item.quantity === undefined ? 1 : strictPositiveInt(item.quantity, `order.items[${index}].quantity`);
     let id: string | number | undefined;
@@ -318,7 +340,13 @@ function normalizeOrder(orderInput: WarrantyOrderSnapshot) {
 }
 
 function normalizeEvidence(evidenceInput: WarrantyEvidenceReference[] | undefined) {
-  if (evidenceInput === undefined) return { evidence: [] as NormalizedWarrantyEvidence[], conflict: false };
+  if (evidenceInput === undefined) {
+    return {
+      evidence: [] as NormalizedWarrantyEvidence[],
+      history: [] as NormalizedWarrantyEvidence[],
+      conflict: false,
+    };
+  }
   if (!Array.isArray(evidenceInput) || evidenceInput.length > WARRANTY_MAX_EVIDENCE) {
     throw new WarrantyReviewValidationError(`request.evidence must contain at most ${WARRANTY_MAX_EVIDENCE} references`);
   }
@@ -327,7 +355,11 @@ function normalizeEvidence(evidenceInput: WarrantyEvidenceReference[] | undefine
   let conflict = false;
   for (let i = 0; i < evidenceInput.length; i += 1) {
     const entry = evidenceInput[i];
-    assertPlainObject(entry, `request.evidence[${i}]`);
+    assertKeys(
+      entry,
+      `request.evidence[${i}]`,
+      ["evidenceId", "revision", "kind", "capturedAt", "sourceRef", "sourceSha256"]
+    );
     const normalized: NormalizedWarrantyEvidence = {
       evidenceId: opaqueText(entry.evidenceId, `request.evidence[${i}].evidenceId`),
       revision: strictPositiveInt(entry.revision, `request.evidence[${i}].revision`, Number.MAX_SAFE_INTEGER),
@@ -366,11 +398,19 @@ function normalizeEvidence(evidenceInput: WarrantyEvidenceReference[] | undefine
     latest.push(rows[rows.length - 1]);
   }
   latest.sort((a, b) => a.evidenceId.localeCompare(b.evidenceId));
-  return { evidence: latest, conflict };
+  const history = Array.from(byIdentity.values()).sort(
+    (a, b) => a.evidenceId.localeCompare(b.evidenceId) || a.revision - b.revision
+  );
+  return { evidence: latest, history, conflict };
 }
 
 function normalizeRequest(requestInput: WarrantyRequestInput, order: ReturnType<typeof normalizeOrder>) {
-  assertPlainObject(requestInput, "request");
+  assertKeys(
+    requestInput,
+    "request",
+    ["requestedAt", "firstObservedAt", "symptom", "selections"],
+    ["details", "evidence"]
+  );
   const requestedAt = canonicalUtc(requestInput.requestedAt, "request.requestedAt");
   const firstObservedAt = canonicalUtc(requestInput.firstObservedAt, "request.firstObservedAt");
   const symptom = normalizeSymptom(requestInput.symptom);
@@ -384,7 +424,7 @@ function normalizeRequest(requestInput: WarrantyRequestInput, order: ReturnType<
 
   const seen = new Set<number>();
   const lines: NormalizedWarrantyLine[] = requestInput.selections.map((selection, selectionIndex) => {
-    assertPlainObject(selection, `request.selections[${selectionIndex}]`);
+    assertKeys(selection, `request.selections[${selectionIndex}]`, ["lineIndex", "quantity"]);
     const lineIndex = selection.lineIndex;
     if (typeof lineIndex !== "number" || !Number.isSafeInteger(lineIndex) || lineIndex < 0) {
       throw new WarrantyReviewValidationError(`request.selections[${selectionIndex}].lineIndex is invalid`);
@@ -411,12 +451,12 @@ function normalizeRequest(requestInput: WarrantyRequestInput, order: ReturnType<
     };
   });
   lines.sort((a, b) => a.lineIndex - b.lineIndex);
-  const { evidence, conflict: evidenceConflict } = normalizeEvidence(requestInput.evidence);
-  return { requestedAt, firstObservedAt, symptom, details, lines, evidence, evidenceConflict };
+  const { evidence, history: evidenceHistory, conflict: evidenceConflict } = normalizeEvidence(requestInput.evidence);
+  return { requestedAt, firstObservedAt, symptom, details, lines, evidence, evidenceHistory, evidenceConflict };
 }
 
 function normalizeVerification(verificationInput: WarrantyVerificationInput) {
-  assertPlainObject(verificationInput, "verification");
+  assertKeys(verificationInput, "verification", ["checkedAt", "verified"], ["onChainStatus"]);
   const checkedAt = canonicalUtc(verificationInput.checkedAt, "verification.checkedAt");
   if (typeof verificationInput.verified !== "boolean") {
     throw new WarrantyReviewValidationError("verification.verified must be boolean");
@@ -426,7 +466,7 @@ function normalizeVerification(verificationInput: WarrantyVerificationInput) {
 }
 
 export async function compileWarrantyReview(input: CompileWarrantyReviewInput): Promise<WarrantyReviewPacket> {
-  assertPlainObject(input, "input");
+  assertKeys(input, "input", ["order", "request", "verification", "evaluatedAt"]);
   const evaluatedAt = canonicalUtc(input.evaluatedAt, "evaluatedAt");
   const order = normalizeOrder(input.order);
   const request = normalizeRequest(input.request, order);
@@ -460,6 +500,9 @@ export async function compileWarrantyReview(input: CompileWarrantyReviewInput): 
     })),
   };
   const normalizedEvidence = request.evidence;
+  const evidenceHistoryDigest = await warrantySha256Hex(
+    canonicalWarrantyReviewJson(request.evidenceHistory)
+  );
   const normalizedRequestCore = {
     requestedAt: request.requestedAt,
     firstObservedAt: request.firstObservedAt,
@@ -467,6 +510,7 @@ export async function compileWarrantyReview(input: CompileWarrantyReviewInput): 
     ...(request.details ? { details: request.details } : {}),
     lines: request.lines,
     evidence: normalizedEvidence,
+    evidenceHistoryDigest,
   };
   const normalizedVerification = {
     checkedAt: verification.checkedAt,
@@ -474,12 +518,12 @@ export async function compileWarrantyReview(input: CompileWarrantyReviewInput): 
     ...(verification.onChainStatus ? { onChainStatus: verification.onChainStatus } : {}),
   };
 
-  const [orderSnapshotDigest, requestDigest, evidenceDigest, verificationDigest] = await Promise.all([
+  const [orderSnapshotDigest, requestDigest, verificationDigest] = await Promise.all([
     warrantySha256Hex(canonicalWarrantyReviewJson(normalizedOrder)),
     warrantySha256Hex(canonicalWarrantyReviewJson(normalizedRequestCore)),
-    warrantySha256Hex(canonicalWarrantyReviewJson(normalizedEvidence)),
     warrantySha256Hex(canonicalWarrantyReviewJson(normalizedVerification)),
   ]);
+  const evidenceDigest = evidenceHistoryDigest;
   const claimId = `wc_${requestDigest.slice(0, 24)}`;
 
   const blockers: string[] = [];
