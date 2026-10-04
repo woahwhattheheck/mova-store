@@ -1,0 +1,149 @@
+name: Verify exact i128 encoding bounds
+on:
+  push:
+    branches: [validation/i128-bounds-rivet76f4-20261004]
+permissions:
+  contents: write
+jobs:
+  amount-encoding:
+    if: github.repository == 'woahwhattheheck/mova-store'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PRODUCT_REF: fix/i128-encoding-bounds-rivet76f4-20261004
+      SOURCE_SHA: aaf9925a9dcea11d902a2f3936282b3ed7cdbff9
+      CI: true
+      NEXT_TELEMETRY_DISABLED: 1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: aaf9925a9dcea11d902a2f3936282b3ed7cdbff9
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Record exact source and install maintained dependencies
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          test "$(git hash-object lib/stellar/scval.ts)" = 839800b25b1a2f4cdc6fc911548787d02a479a52
+          test -z "$(git ls-remote --heads origin "refs/heads/$PRODUCT_REF")"
+          mkdir -p evidence
+          { node --version; npm --version; git rev-parse HEAD; git rev-parse HEAD^{tree}; sha256sum package-lock.json lib/stellar/scval.ts tests/lib/stellar/scval.test.ts; } > evidence/environment.txt
+          npm ci --no-audit --no-fund 2>&1 | tee evidence/install.log
+      - name: Extend the existing authoritative test file
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('tests/lib/stellar/scval.test.ts')
+          text = p.read_text()
+          anchor = '  it("accepts number and string inputs", () => {'
+          addition = '''  it.each([
+              (1n << 127n),
+              -(1n << 127n) - 1n,
+              (1n << 128n),
+              -(1n << 128n),
+            ])("rejects unrepresentable i128 values: %s", (value) => {
+              expect(() => i128ToScVal(value)).toThrow(RangeError);
+              expect(() => i128ToScVal(value.toString())).toThrow(RangeError);
+            });
+
+            it.each([Number.MAX_SAFE_INTEGER + 1, Number.MIN_SAFE_INTEGER - 1])(
+              "rejects unsafe numeric i128 inputs: %s",
+              (value) => {
+                expect(() => i128ToScVal(value)).toThrow(RangeError);
+              }
+            );
+
+            it("preserves exact safe-number endpoints and large decimal strings", () => {
+              for (const value of [Number.MIN_SAFE_INTEGER, Number.MAX_SAFE_INTEGER]) {
+                expect(i128ToScVal(value).toXDR("base64")).toBe(
+                  nativeToScVal(BigInt(value), { type: "i128" }).toXDR("base64")
+                );
+              }
+              const value = (1n << 100n) + 1n;
+              expect(i128ToScVal(value.toString()).toXDR("base64")).toBe(
+                nativeToScVal(value, { type: "i128" }).toXDR("base64")
+              );
+            });
+
+          '''
+          import textwrap
+          addition = textwrap.dedent(addition)
+          addition = '\n'.join('  ' + line if line else '' for line in addition.splitlines()) + '\n'
+          assert text.count(anchor) == 1
+          p.write_text(text.replace(anchor, addition + anchor))
+          PY
+      - name: Record the six existing-source boundary failures
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          npx --no-install vitest run tests/lib/stellar/scval.test.ts -t 'rejects unrepresentable i128|rejects unsafe numeric i128' --reporter=json --outputFile=evidence/before.json > evidence/before.log 2>&1
+          code=$?
+          set -e
+          test "$code" -ne 0
+          python - <<'PY'
+          import json
+          r=json.load(open('evidence/before.json'))
+          assert r['numFailedTests'] == 6, r
+          assert r.get('numRuntimeErrorTestSuites',0) == 0, r
+          print('Baseline: six actual assertion failures in the maintained file')
+          PY
+      - name: Add the signed-integer boundary without changing valid encoding
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('lib/stellar/scval.ts')
+          text=p.read_text()
+          old='''export function i128ToScVal(value: bigint | number | string): xdr.ScVal {
+            const v = BigInt(value);
+          '''
+          new='''export function i128ToScVal(value: bigint | number | string): xdr.ScVal {
+            if (typeof value === "number" && !Number.isSafeInteger(value)) {
+              throw new RangeError("i128 numbers must be safe integers; use bigint or an integer string");
+            }
+            const v = BigInt(value);
+            if (v < -(1n << 127n) || v >= 1n << 127n) {
+              throw new RangeError("i128 value is outside the signed 128-bit range");
+            }
+          '''
+          assert text.count(old)==1
+          text=text.replace(old,new)
+          text=text.replace(' * Build an i128 ScVal. Verified byte-for-byte identical to\n', ' * Build an i128 ScVal, rejecting out-of-range and unsafe numeric inputs.\n * Verified byte-for-byte identical to\n')
+          p.write_text(text)
+          PY
+          npx --no-install prettier --write lib/stellar/scval.ts tests/lib/stellar/scval.test.ts
+      - name: Run the single maintained ScVal suite
+        run: |
+          set -euo pipefail
+          npx --no-install vitest run tests/lib/stellar/scval.test.ts --reporter=json --outputFile=evidence/after.json 2>&1 | tee evidence/after.log
+          python - <<'PY'
+          import json
+          r=json.load(open('evidence/after.json'))
+          assert r['success'] and r['numFailedTests']==0 and r['numPassedTests'] >= 7, r
+          print('Final maintained-file result:',r['numPassedTests'],'passed,',r['numFailedTests'],'failed')
+          PY
+          git diff --exit-code -- package.json package-lock.json
+      - name: Retain only the two source files on a new branch
+        run: |
+          set -euo pipefail
+          git diff --check
+          git diff -- lib/stellar/scval.ts tests/lib/stellar/scval.test.ts > evidence/source.patch
+          git add lib/stellar/scval.ts tests/lib/stellar/scval.test.ts
+          test "$(git diff --cached --name-only | wc -l)" -eq 2
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'fix(stellar): reject lossy i128 inputs before XDR encoding'
+          git push origin "HEAD:refs/heads/$PRODUCT_REF"
+          git rev-parse HEAD | tee evidence/product-sha.txt
+          git rev-parse HEAD^{tree} | tee evidence/product-tree.txt
+          git ls-files -s lib/stellar/scval.ts tests/lib/stellar/scval.test.ts | tee evidence/source-blobs.txt
+          cp lib/stellar/scval.ts evidence/scval.ts
+          cp tests/lib/stellar/scval.test.ts evidence/scval.test.ts
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mova-i128-bounds-rivet76f4
+          path: evidence
+          retention-days: 7
+          if-no-files-found: error
