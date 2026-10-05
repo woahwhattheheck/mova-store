@@ -50,6 +50,8 @@ export interface IndexerCallbacks {
 }
 
 const RETENTION_RETRY_LEDGER_DELTA = 5;
+/** Recent overlap protection, not a permanent record of every indexed event. */
+export const INDEXER_SEEN_ID_LIMIT = 10_000;
 
 /**
  * Whether an RPC error means the requested position fell outside the retained
@@ -76,6 +78,8 @@ export class PaymentEventIndexer {
   private eventsSeen = 0;
   private lastError: string | undefined;
   private readonly seenIds = new Set<string>();
+  /** Invalidates pending polls when stopped, including an immediate restart. */
+  private generation = 0;
 
   private timer: ReturnType<typeof setInterval> | null = null;
   /** Prevents a new poll from starting while the previous one is still running. */
@@ -144,6 +148,8 @@ export class PaymentEventIndexer {
 
   stop(): void {
     this.running = false;
+    this.generation += 1;
+    this.seenIds.clear();
     this.paused = false;
     this.detachVisibilityListener();
     if (this.timer !== null) {
@@ -161,6 +167,7 @@ export class PaymentEventIndexer {
     // deliver the same event twice.
     if (this.inFlight) return;
     this.inFlight = true;
+    const generation = this.generation;
 
     try {
       if (!this.initialized) {
@@ -170,6 +177,7 @@ export class PaymentEventIndexer {
         }
       }
 
+      if (generation !== this.generation) return;
       await this.poll(callbacks);
     } finally {
       this.inFlight = false;
@@ -301,27 +309,23 @@ export class PaymentEventIndexer {
 
   private async poll(callbacks: IndexerCallbacks): Promise<void> {
     if (!this.running || !this.initialized) return;
+    const generation = this.generation;
     try {
       const res = await this.fetchEvents();
+      if (generation !== this.generation) return;
       this.latestLedger = res.latestLedger;
       this.lastError = undefined;
 
-      // Once a cursor is available, drop the start-ledger window so the next
-      // poll advances by cursor instead of re-scanning the backfill range. This
-      // has to stay inside the `if`: clearing it on a cursor-less response left
-      // the indexer with neither a cursor nor a start ledger, so every later
-      // poll threw "no cursor or start ledger to poll from" and the scan stopped
-      // advancing entirely.
-      if (res.cursor) {
-        this.cursor = res.cursor;
-        this.persistCursor();
-        this.startLedger = undefined;
-      }
-
       for (const raw of res.events) {
+        // A consumer may stop the indexer while handling the previous event.
+        if (generation !== this.generation) return;
         if (!raw.inSuccessfulContractCall) continue;
         if (this.seenIds.has(raw.id)) continue;
         this.seenIds.add(raw.id);
+        if (this.seenIds.size > INDEXER_SEEN_ID_LIMIT) {
+          const oldest = this.seenIds.values().next();
+          if (!oldest.done) this.seenIds.delete(oldest.value);
+        }
 
         const decoded = this.decodeEvent(raw);
         if (decoded) {
@@ -334,8 +338,24 @@ export class PaymentEventIndexer {
         }
       }
 
+      if (generation !== this.generation) return;
+      // Commit the page only after delivery, so stopping in a callback does
+      // not skip the remainder of the page when the same indexer restarts.
+      // Once a cursor is available, drop the start-ledger window so the next
+      // poll advances by cursor instead of re-scanning the backfill range. This
+      // has to stay inside the `if`: clearing it on a cursor-less response left
+      // the indexer with neither a cursor nor a start ledger, so every later
+      // poll threw "no cursor or start ledger to poll from" and the scan stopped
+      // advancing entirely.
+      if (res.cursor) {
+        this.cursor = res.cursor;
+        this.persistCursor();
+        this.startLedger = undefined;
+      }
+
       callbacks.onStatus?.(this.status);
     } catch (err) {
+      if (generation !== this.generation) return;
       this.lastError = String(err instanceof Error ? err.message : err);
       callbacks.onError?.(new Error(`getEvents failed: ${this.lastError}`));
       this.recoverFromRetentionError(err);
