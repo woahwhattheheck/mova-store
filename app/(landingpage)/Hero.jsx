@@ -1,27 +1,7 @@
 "use client";
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { useAuth } from "../../lib/AuthContext";
-import Toast from "../../components/Toast";
-import useToast from "../../hooks/useToast";
 import Link from "next/link";
 
 export default function Hero() {
-  const { user } = useAuth();
-  const router = useRouter();
-  const { toast, showToast, hideToast } = useToast(5000);
-
-  const handleProtectedLinkClick = (e, path) => {
-    if (!user) {
-      e.preventDefault();
-      showToast("Kindly login first");
-      router.push("/profile/login");
-    } else {
-      e.preventDefault();
-      router.push(path);
-    }
-  };
-
   return (
     <>
       <section className="relative h-screen overflow-hidden bg-mova-hero bg-cover bg-center">
@@ -42,8 +22,7 @@ export default function Hero() {
           <div className="mova-fade-up-delay-2 mt-10 flex flex-wrap items-center justify-center gap-4">
             <Link
               className="rounded-md bg-purple-600 px-7 py-3 font-semibold text-white shadow-mova transition hover:bg-purple-500"
-              href={user ? "/shop" : "#"}
-              onClick={(e) => handleProtectedLinkClick(e, "/shop")}
+              href="/shop"
             >
               Shop Now
             </Link>
@@ -56,7 +35,6 @@ export default function Hero() {
           </div>
         </div>
       </section>
-      <Toast message={toast.message} show={toast.show} onClose={hideToast} />
     </>
   );
 }
